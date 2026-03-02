@@ -214,6 +214,46 @@ fn show_appearance(ui: &mut Ui, draft: &mut Config) {
         });
         ui.add_space(2.0);
     }
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    // ── Text color override ───────────────────────────────────────────
+    ui.label("Text color:");
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        // Color swatch preview
+        let swatch_color = if is_valid_hex(&draft.text_color) {
+            crate::theme::parse_color(&draft.text_color)
+        } else {
+            Color32::GRAY
+        };
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(24.0, 24.0), egui::Sense::hover());
+        ui.painter().rect_filled(rect, 3.0, swatch_color);
+        ui.painter().rect_stroke(rect, 3.0, egui::Stroke::new(1.0, Color32::from_gray(100)));
+
+        ui.add(
+            egui::TextEdit::singleline(&mut draft.text_color)
+                .hint_text("#rrggbb  (blank = theme default)")
+                .desired_width(200.0),
+        );
+
+        if ui.small_button("Reset").on_hover_text("Use theme default").clicked() {
+            draft.text_color.clear();
+        }
+    });
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new("Override the primary text color. Leave blank to use the theme's default.")
+            .small()
+            .color(Color32::GRAY),
+    );
+}
+
+fn is_valid_hex(s: &str) -> bool {
+    let h = s.trim_start_matches('#');
+    h.len() == 6 && h.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn show_sync(ui: &mut Ui, draft: &mut Config, pw_visible: &mut bool) {

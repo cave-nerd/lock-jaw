@@ -20,6 +20,9 @@ pub struct Config {
     /// Controls how much bigger H1 is vs body; other heading levels scale proportionally.
     #[serde(default = "default_heading_scale")]
     pub heading_scale: f32,
+    /// Custom text color override (hex `#rrggbb`). Empty string = use theme default.
+    #[serde(default)]
+    pub text_color: String,
     /// WebDAV sync settings.
     #[serde(default)]
     pub webdav: WebDavConfig,
@@ -36,6 +39,7 @@ impl Default for Config {
             theme: "dark".to_string(),
             font_size: 14.0,
             heading_scale: default_heading_scale(),
+            text_color: String::new(),
             webdav: WebDavConfig::default(),
         }
     }

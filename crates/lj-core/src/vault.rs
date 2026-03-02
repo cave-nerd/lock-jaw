@@ -44,6 +44,42 @@ impl Vault {
         Note::load(&path)
     }
 
+    /// Create a new note inside a sub-directory (folder relative to vault root).
+    pub fn create_note_in(&mut self, folder: &Path, name: &str) -> Result<Note> {
+        let filename = sanitize_filename(name);
+        let abs_folder = self.root.join(folder);
+        std::fs::create_dir_all(&abs_folder)?;
+        let path = abs_folder.join(format!("{filename}.md"));
+        let initial = format!("# {name}\n\n");
+        std::fs::write(&path, &initial)?;
+        self.entries.push(path.clone());
+        self.entries.sort();
+        Note::load(&path)
+    }
+
+    /// Create a new section (sub-directory) inside the vault root.
+    pub fn create_folder(&mut self, name: &str) -> Result<PathBuf> {
+        let dir_name = sanitize_filename(name);
+        let path = self.root.join(&dir_name);
+        std::fs::create_dir_all(&path)?;
+        Ok(path)
+    }
+
+    /// Rename a note file. Returns the new absolute path.
+    pub fn rename_note(&mut self, old_path: &Path, new_name: &str) -> Result<PathBuf> {
+        let filename = sanitize_filename(new_name);
+        let parent = old_path.parent().unwrap_or(&self.root);
+        let new_path = parent.join(format!("{filename}.md"));
+        if new_path == old_path {
+            return Ok(old_path.to_path_buf());
+        }
+        std::fs::rename(old_path, &new_path)?;
+        self.entries.retain(|p| p != old_path);
+        self.entries.push(new_path.clone());
+        self.entries.sort();
+        Ok(new_path)
+    }
+
     /// Delete a note from disk and remove from entries.
     pub fn delete_note(&mut self, path: &Path) -> Result<()> {
         std::fs::remove_file(path)?;

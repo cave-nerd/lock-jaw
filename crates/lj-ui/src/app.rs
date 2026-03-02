@@ -9,7 +9,7 @@ use crate::{
     editor::EditorPane,
     settings::SettingsWindow,
     sidebar::{Sidebar, SidebarAction},
-    theme::{load_theme_by_name, resolve_system_theme, Theme},
+    theme::{load_theme_by_name, parse_color, resolve_system_theme, Theme},
 };
 
 pub struct LockJawApp {
@@ -35,6 +35,7 @@ impl LockJawApp {
         let theme = load_theme_by_name(&config.theme);
         theme.apply(&cc.egui_ctx);
         apply_text_styles(&cc.egui_ctx, config.font_size, config.heading_scale);
+        apply_text_color(&cc.egui_ctx, &config.text_color);
 
         let vault = open_vault(&config);
 
@@ -91,6 +92,22 @@ impl LockJawApp {
             }
             Err(e) => {
                 self.status_message = Some(format!("Error opening note: {e}"));
+            }
+        }
+    }
+
+    fn rename_current_note(&mut self, new_name: String) {
+        if let (Some(note), Some(vault)) = (self.open_note.as_mut(), self.vault.as_mut()) {
+            match vault.rename_note(&note.path.clone(), &new_name) {
+                Ok(new_path) => {
+                    note.path = new_path;
+                    self.status_message = Some(format!("Renamed to: {new_name}"));
+                    info!("Renamed note to: {new_name}");
+                }
+                Err(e) => {
+                    self.status_message = Some(format!("Rename failed: {e}"));
+                    error!("Rename error: {e}");
+                }
             }
         }
     }
@@ -167,6 +184,7 @@ impl LockJawApp {
         if new.meta.dark != self.theme.meta.dark {
             self.theme = new;
             self.theme.apply(ctx);
+            apply_text_color(ctx, &self.config.text_color);
         }
     }
 
@@ -179,10 +197,14 @@ impl LockJawApp {
             self.system_theme_counter = 0;
         }
         // Font size / heading scale
-        let font_changed = (new_config.font_size - self.config.font_size).abs() > 0.1;
+        let font_changed    = (new_config.font_size    - self.config.font_size   ).abs() > 0.1;
         let heading_changed = (new_config.heading_scale - self.config.heading_scale).abs() > 0.05;
         if font_changed || heading_changed {
             apply_text_styles(ctx, new_config.font_size, new_config.heading_scale);
+        }
+        // Text color override (re-apply whenever theme or color changes)
+        if new_config.text_color != self.config.text_color || new_config.theme != self.config.theme {
+            apply_text_color(ctx, &new_config.text_color);
         }
         // Vault path
         if new_config.vault_path != self.config.vault_path {
@@ -216,9 +238,9 @@ impl eframe::App for LockJawApp {
             self.save_current_note();
         }
 
-        let accent = self.theme.colors.accent.clone();
-        let muted  = self.theme.colors.fg_muted.clone();
-        let font_size = self.theme.editor.font_size;
+        let accent    = self.theme.colors.accent.clone();
+        let muted     = self.theme.colors.fg_muted.clone();
+        let font_size = self.config.font_size;
 
         // ── Menu bar ────────────────────────────────────────────────────
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
@@ -281,7 +303,7 @@ impl eframe::App for LockJawApp {
                         ui.separator();
                         ui.label(
                             egui::RichText::new("unsaved")
-                                .color(crate::theme::parse_color(&self.theme.colors.warning)),
+                                .color(parse_color(&self.theme.colors.warning)),
                         );
                     }
                 } else if let Some(ref vault) = self.vault {
@@ -304,7 +326,7 @@ impl eframe::App for LockJawApp {
                     ui.label(
                         egui::RichText::new(theme_name)
                             .small()
-                            .color(crate::theme::parse_color(&muted)),
+                            .color(parse_color(&muted)),
                     );
                     ui.separator();
                     if let Some(msg) = &self.status_message {
@@ -353,6 +375,34 @@ impl eframe::App for LockJawApp {
                     }
                 }
             }
+            Some(SidebarAction::CreateNoteIn(folder, name)) => {
+                if let Some(vault) = self.vault.as_mut() {
+                    match vault.create_note_in(&folder, &name) {
+                        Ok(note) => {
+                            let path = note.path.clone();
+                            self.open_note = Some(note);
+                            self.plugin_host.on_note_open(path.to_str().unwrap_or(""));
+                            self.status_message = Some(format!("Created: {name}"));
+                        }
+                        Err(e) => {
+                            self.status_message = Some(format!("Error creating note: {e}"));
+                        }
+                    }
+                }
+            }
+            Some(SidebarAction::CreateFolder(name)) => {
+                if let Some(vault) = self.vault.as_mut() {
+                    match vault.create_folder(&name) {
+                        Ok(_) => {
+                            vault.refresh().ok();
+                            self.status_message = Some(format!("Section created: {name}"));
+                        }
+                        Err(e) => {
+                            self.status_message = Some(format!("Error creating section: {e}"));
+                        }
+                    }
+                }
+            }
             Some(SidebarAction::DeleteNote(path)) => {
                 if let Some(vault) = self.vault.as_mut() {
                     if let Err(e) = vault.delete_note(&path) {
@@ -371,7 +421,10 @@ impl eframe::App for LockJawApp {
         // ── Central editor panel ─────────────────────────────────────────
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(note) = self.open_note.as_mut() {
-                self.editor.show(ui, note, font_size);
+                let (_, rename_request) = self.editor.show(ui, note, font_size);
+                if let Some(new_name) = rename_request {
+                    self.rename_current_note(new_name);
+                }
             } else {
                 ui.centered_and_justified(|ui| {
                     ui.label(
@@ -379,7 +432,7 @@ impl eframe::App for LockJawApp {
                             "Lock Jaw\n\nSelect or create a note to get started.",
                         )
                         .size(18.0)
-                        .color(crate::theme::parse_color(&muted)),
+                        .color(parse_color(&muted)),
                     );
                 });
             }
@@ -407,6 +460,19 @@ fn apply_text_styles(ctx: &egui::Context, size: f32, heading_scale: f32) {
         egui::FontId::proportional(size),
     );
     ctx.set_style(style);
+}
+
+/// Apply a text color override on top of the current theme visuals.
+/// An empty string means "no override — use theme default".
+fn apply_text_color(ctx: &egui::Context, hex: &str) {
+    if hex.is_empty() {
+        return;
+    }
+    let color = parse_color(hex);
+    let mut visuals = ctx.style().visuals.clone();
+    visuals.widgets.noninteractive.fg_stroke.color = color;
+    visuals.widgets.inactive.fg_stroke.color       = color;
+    ctx.set_visuals(visuals);
 }
 
 fn open_vault(config: &Config) -> Option<Vault> {
