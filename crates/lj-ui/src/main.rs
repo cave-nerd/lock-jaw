@@ -1,3 +1,4 @@
+mod addons;
 mod app;
 mod editor;
 mod settings;

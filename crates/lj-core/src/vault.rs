@@ -7,8 +7,11 @@ use crate::Note;
 /// A vault is a directory containing markdown notes.
 pub struct Vault {
     pub root: PathBuf,
-    /// All discovered `.md` file paths, sorted.
+    /// All discovered `.md` file paths (absolute), sorted.
     pub entries: Vec<PathBuf>,
+    /// Relative names of direct sub-directories of root, sorted.
+    /// Tracked separately so empty sections still appear in the UI.
+    pub folders: Vec<PathBuf>,
 }
 
 impl Vault {
@@ -16,15 +19,17 @@ impl Vault {
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
         anyhow::ensure!(root.is_dir(), "Vault path is not a directory: {}", root.display());
-        let mut vault = Self { root, entries: Vec::new() };
+        let mut vault = Self { root, entries: Vec::new(), folders: Vec::new() };
         vault.refresh()?;
         Ok(vault)
     }
 
-    /// Re-scan the vault directory for `.md` files.
+    /// Re-scan the vault directory for `.md` files and direct sub-directories.
     pub fn refresh(&mut self) -> Result<()> {
         self.entries = collect_md_files(&self.root)?;
         self.entries.sort();
+        self.folders = collect_direct_subdirs(&self.root)?;
+        self.folders.sort();
         Ok(())
     }
 
@@ -54,6 +59,14 @@ impl Vault {
         std::fs::write(&path, &initial)?;
         self.entries.push(path.clone());
         self.entries.sort();
+        // Ensure the folder is tracked
+        let rel = folder.components().next()
+            .map(|c| PathBuf::from(c.as_os_str()))
+            .unwrap_or(folder.to_path_buf());
+        if !self.folders.contains(&rel) {
+            self.folders.push(rel);
+            self.folders.sort();
+        }
         Note::load(&path)
     }
 
@@ -62,6 +75,11 @@ impl Vault {
         let dir_name = sanitize_filename(name);
         let path = self.root.join(&dir_name);
         std::fs::create_dir_all(&path)?;
+        let rel = PathBuf::from(&dir_name);
+        if !self.folders.contains(&rel) {
+            self.folders.push(rel);
+            self.folders.sort();
+        }
         Ok(path)
     }
 
@@ -75,6 +93,31 @@ impl Vault {
         }
         std::fs::rename(old_path, &new_path)?;
         self.entries.retain(|p| p != old_path);
+        self.entries.push(new_path.clone());
+        self.entries.sort();
+        Ok(new_path)
+    }
+
+    /// Move a note to a different folder (or to the vault root when `target_folder` is `None`).
+    /// Returns the new absolute path.
+    pub fn move_note(&mut self, path: &Path, target_folder: Option<&Path>) -> Result<PathBuf> {
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Note path has no filename"))?;
+        let dest_dir = match target_folder {
+            Some(folder) => {
+                let abs = self.root.join(folder);
+                std::fs::create_dir_all(&abs)?;
+                abs
+            }
+            None => self.root.clone(),
+        };
+        let new_path = dest_dir.join(filename);
+        if new_path == path {
+            return Ok(path.to_path_buf());
+        }
+        std::fs::rename(path, &new_path)?;
+        self.entries.retain(|p| p != path);
         self.entries.push(new_path.clone());
         self.entries.sort();
         Ok(new_path)
@@ -105,6 +148,20 @@ fn collect_md_files(dir: &Path) -> Result<Vec<PathBuf>> {
             }
         } else if path.extension().map(|e| e == "md").unwrap_or(false) {
             results.push(path);
+        }
+    }
+    Ok(results)
+}
+
+/// Returns the names of direct sub-directories of `dir` as relative `PathBuf`s.
+fn collect_direct_subdirs(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut results = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.path().is_dir()
+            && !entry.file_name().to_string_lossy().starts_with('.')
+        {
+            results.push(PathBuf::from(entry.file_name()));
         }
     }
     Ok(results)

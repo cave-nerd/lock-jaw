@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::webdav::WebDavConfig;
 
 fn default_heading_scale() -> f32 { 2.0 }
+fn default_icon_style() -> String { "emoji".to_string() }
+fn default_view_mode() -> String { "both".to_string() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -23,9 +25,18 @@ pub struct Config {
     /// Custom text color override (hex `#rrggbb`). Empty string = use theme default.
     #[serde(default)]
     pub text_color: String,
+    /// Sidebar icon style. Options: "unicode", "emoji", "ascii", "none".
+    #[serde(default = "default_icon_style")]
+    pub icon_style: String,
+    /// Editor/preview view mode. Options: "both", "editor", "preview".
+    #[serde(default = "default_view_mode")]
+    pub view_mode: String,
     /// WebDAV sync settings.
     #[serde(default)]
     pub webdav: WebDavConfig,
+    /// Plugin names that are explicitly disabled in the addon manager.
+    #[serde(default)]
+    pub disabled_plugins: Vec<String>,
 }
 
 impl Default for Config {
@@ -40,7 +51,10 @@ impl Default for Config {
             font_size: 14.0,
             heading_scale: default_heading_scale(),
             text_color: String::new(),
+            icon_style: default_icon_style(),
+            view_mode: default_view_mode(),
             webdav: WebDavConfig::default(),
+            disabled_plugins: Vec::new(),
         }
     }
 }

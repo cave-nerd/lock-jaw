@@ -6,6 +6,7 @@ use lj_plugin::PluginHost;
 use tracing::{error, info};
 
 use crate::{
+    addons::{AddonsAction, AddonsWindow},
     editor::EditorPane,
     settings::SettingsWindow,
     sidebar::{Sidebar, SidebarAction},
@@ -21,6 +22,7 @@ pub struct LockJawApp {
     editor: EditorPane,
     plugin_host: PluginHost,
     settings: SettingsWindow,
+    addons: AddonsWindow,
     status_message: Option<String>,
     // WebDAV sync state
     sync_rx: Option<Receiver<anyhow::Result<webdav::SyncStats>>>,
@@ -41,7 +43,7 @@ impl LockJawApp {
 
         let mut plugin_host = PluginHost::new();
         if let Some(plugins_dir) = Config::plugins_dir() {
-            if let Err(e) = plugin_host.load_from_dir(&plugins_dir) {
+            if let Err(e) = plugin_host.load_from_dir(&plugins_dir, &config.disabled_plugins) {
                 error!("Plugin load error: {e}");
             }
         }
@@ -55,6 +57,7 @@ impl LockJawApp {
             editor: EditorPane::default(),
             plugin_host,
             settings: SettingsWindow::default(),
+            addons: AddonsWindow::default(),
             status_message: None,
             sync_rx: None,
             is_syncing: false,
@@ -97,17 +100,36 @@ impl LockJawApp {
     }
 
     fn rename_current_note(&mut self, new_name: String) {
-        if let (Some(note), Some(vault)) = (self.open_note.as_mut(), self.vault.as_mut()) {
-            match vault.rename_note(&note.path.clone(), &new_name) {
-                Ok(new_path) => {
+        // Grab old path first (cloned) so we don't hold two &mut self borrows at once.
+        let old_path = match self.open_note.as_ref() {
+            Some(n) => n.path.clone(),
+            None => return,
+        };
+
+        // Perform the filesystem rename through the vault.
+        let result = match self.vault.as_mut() {
+            Some(vault) => vault.rename_note(&old_path, &new_name),
+            None => return,
+        };
+
+        match result {
+            Ok(new_path) => {
+                // Update the in-memory note's path.
+                if let Some(note) = self.open_note.as_mut() {
                     note.path = new_path;
-                    self.status_message = Some(format!("Renamed to: {new_name}"));
-                    info!("Renamed note to: {new_name}");
+                    // Flush any unsaved edits to the new location right away.
+                    if note.dirty {
+                        if let Err(e) = note.save() {
+                            error!("Could not save after rename: {e}");
+                        }
+                    }
                 }
-                Err(e) => {
-                    self.status_message = Some(format!("Rename failed: {e}"));
-                    error!("Rename error: {e}");
-                }
+                self.status_message = Some(format!("Renamed to: {new_name}"));
+                info!("Renamed note to: {new_name}");
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Rename failed: {e}"));
+                error!("Rename error: {e}");
             }
         }
     }
@@ -220,6 +242,58 @@ impl LockJawApp {
             self.status_message = Some(format!("Could not save config: {e}"));
         }
     }
+
+    fn handle_addons_action(&mut self, action: AddonsAction) {
+        match action {
+            AddonsAction::Reload => {
+                if let Some(dir) = Config::plugins_dir() {
+                    match self.plugin_host.reload(&dir, &self.config.disabled_plugins) {
+                        Ok(()) => {
+                            let n = self.plugin_host.plugins.len();
+                            self.status_message =
+                                Some(format!("Addons reloaded ({n} found)."));
+                        }
+                        Err(e) => {
+                            self.status_message = Some(format!("Reload failed: {e}"));
+                        }
+                    }
+                }
+            }
+            AddonsAction::Remove(name) => {
+                match self.plugin_host.remove_plugin(&name) {
+                    Ok(true) => {
+                        // Also remove from disabled list if it was there
+                        self.config.disabled_plugins.retain(|d| d != &name);
+                        self.config.save().ok();
+                        self.status_message = Some(format!("Addon \"{name}\" removed."));
+                    }
+                    Ok(false) => {
+                        self.status_message = Some(format!("Addon \"{name}\" not found."));
+                    }
+                    Err(e) => {
+                        self.status_message = Some(format!("Remove failed: {e}"));
+                    }
+                }
+            }
+            AddonsAction::Toggle(name) => {
+                if self.config.disabled_plugins.contains(&name) {
+                    self.config.disabled_plugins.retain(|d| d != &name);
+                    // Mark as enabled in the loaded plugin
+                    if let Some(p) = self.plugin_host.plugins.iter_mut().find(|p| p.manifest.name == name) {
+                        p.enabled = true;
+                    }
+                    self.status_message = Some(format!("Addon \"{name}\" enabled."));
+                } else {
+                    self.config.disabled_plugins.push(name.clone());
+                    if let Some(p) = self.plugin_host.plugins.iter_mut().find(|p| p.manifest.name == name) {
+                        p.enabled = false;
+                    }
+                    self.status_message = Some(format!("Addon \"{name}\" disabled."));
+                }
+                self.config.save().ok();
+            }
+        }
+    }
 }
 
 impl eframe::App for LockJawApp {
@@ -231,6 +305,11 @@ impl eframe::App for LockJawApp {
         if let Some(new_config) = self.settings.show(ctx) {
             self.apply_config(new_config, ctx);
             self.status_message = Some("Settings saved.".to_string());
+        }
+
+        // Addons window
+        if let Some(action) = self.addons.show(ctx, &self.plugin_host, &self.config) {
+            self.handle_addons_action(action);
         }
 
         // Ctrl+S
@@ -265,6 +344,21 @@ impl eframe::App for LockJawApp {
                     self.settings.open(&self.config);
                 }
 
+                // ── View menu ────────────────────────────────────────────
+                ui.menu_button("View", |ui| {
+                    for (mode, label) in [
+                        ("both",    "Editor + Preview"),
+                        ("editor",  "Editor only"),
+                        ("preview", "Preview only"),
+                    ] {
+                        if ui.selectable_label(self.config.view_mode == mode, label).clicked() {
+                            self.config.view_mode = mode.to_string();
+                            self.config.save().ok();
+                            ui.close_menu();
+                        }
+                    }
+                });
+
                 // Sync button
                 let sync_label = if self.is_syncing { "⟳ Syncing…" } else { "⟳ Sync" };
                 if ui
@@ -278,6 +372,11 @@ impl eframe::App for LockJawApp {
                     ctx.request_repaint();
                 }
 
+                if ui.button("Addons").clicked() {
+                    self.addons.open = true;
+                }
+
+                // Plugin command palette (shown only when plugins register commands)
                 let commands = self.plugin_host.commands();
                 if !commands.is_empty() {
                     ui.menu_button("Plugins", |ui| {
@@ -343,7 +442,7 @@ impl eframe::App for LockJawApp {
             .show(ctx, |ui| {
                 if let Some(vault) = &self.vault {
                     let active_path = self.open_note.as_ref().map(|n| n.path.as_path());
-                    self.sidebar.show(ui, vault, active_path, &accent, &muted)
+                    self.sidebar.show(ui, vault, active_path, &accent, &muted, &self.config.icon_style)
                 } else {
                     ui.centered_and_justified(|ui| {
                         ui.label(
@@ -403,6 +502,26 @@ impl eframe::App for LockJawApp {
                     }
                 }
             }
+            Some(SidebarAction::MoveNote(note_path, target_folder)) => {
+                let old_path = note_path.clone();
+                let result = self.vault.as_mut().map(|v| {
+                    v.move_note(&note_path, target_folder.as_deref())
+                });
+                match result {
+                    Some(Ok(new_path)) => {
+                        if self.open_note.as_ref().map(|n| n.path == old_path).unwrap_or(false) {
+                            if let Some(note) = self.open_note.as_mut() {
+                                note.path = new_path;
+                            }
+                        }
+                        self.status_message = Some("Note moved.".to_string());
+                    }
+                    Some(Err(e)) => {
+                        self.status_message = Some(format!("Move failed: {e}"));
+                    }
+                    None => {}
+                }
+            }
             Some(SidebarAction::DeleteNote(path)) => {
                 if let Some(vault) = self.vault.as_mut() {
                     if let Err(e) = vault.delete_note(&path) {
@@ -419,9 +538,11 @@ impl eframe::App for LockJawApp {
         }
 
         // ── Central editor panel ─────────────────────────────────────────
+        let view_mode = self.config.view_mode.clone();
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(note) = self.open_note.as_mut() {
-                let (_, rename_request) = self.editor.show(ui, note, font_size);
+                let (_, rename_request) =
+                    self.editor.show(ui, note, font_size, &view_mode);
                 if let Some(new_name) = rename_request {
                     self.rename_current_note(new_name);
                 }

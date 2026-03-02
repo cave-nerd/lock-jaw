@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use egui::{Color32, RichText, Ui};
@@ -8,7 +8,7 @@ use crate::theme::parse_color;
 
 pub struct Sidebar {
     pub search_query: String,
-    /// Shared text buffer for all new-note / new-folder name inputs.
+    /// Shared text buffer for all new-note name inputs.
     pub new_note_name: String,
     /// Whether the new-note input is visible.
     pub show_new_note_input: bool,
@@ -41,6 +41,8 @@ pub enum SidebarAction {
     /// Create a new section (sub-directory) at the vault root.
     CreateFolder(String),
     DeleteNote(PathBuf),
+    /// Move a note to a folder (relative to vault root), or `None` = vault root.
+    MoveNote(PathBuf, Option<PathBuf>),
 }
 
 impl Sidebar {
@@ -51,10 +53,16 @@ impl Sidebar {
         active_path: Option<&Path>,
         accent_color: &str,
         muted_color: &str,
+        icon_style: &str,
     ) -> Option<SidebarAction> {
         let mut action: Option<SidebarAction> = None;
-        let accent = parse_color(accent_color);
-        let muted  = parse_color(muted_color);
+        let accent     = parse_color(accent_color);
+        let muted      = parse_color(muted_color);
+        let note_pfx   = note_prefix(icon_style);
+        let folder_pfx = folder_prefix(icon_style);
+
+        // Snapshot folder list for use inside closures (shared ref, no cost).
+        let vault_folders: &[PathBuf] = &vault.folders;
 
         // ── Header row ──────────────────────────────────────────────────
         ui.add_space(4.0);
@@ -112,7 +120,7 @@ impl Sidebar {
         ui.add_space(6.0);
 
         // ── Build display data before entering closures ─────────────────
-        let query = self.search_query.to_lowercase();
+        let query     = self.search_query.to_lowercase();
         let searching = !query.is_empty();
 
         let filtered: Vec<PathBuf> = vault.entries.iter()
@@ -129,8 +137,6 @@ impl Sidebar {
             .cloned()
             .collect();
 
-        // Group notes by folder (relative to vault root).
-        // When searching, show flat (no grouping).
         let mut root_notes: Vec<PathBuf> = Vec::new();
         let mut folder_map: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
 
@@ -138,52 +144,74 @@ impl Sidebar {
             root_notes = filtered;
         } else {
             for path in &filtered {
-                let rel = path.strip_prefix(&vault.root).unwrap_or(path);
-                match rel.parent() {
-                    None => root_notes.push(path.clone()),
-                    Some(p) if p == Path::new("") => root_notes.push(path.clone()),
-                    Some(parent) => {
-                        folder_map
-                            .entry(parent.to_path_buf())
-                            .or_default()
-                            .push(path.clone());
-                    }
+                let rel    = path.strip_prefix(&vault.root).unwrap_or(path);
+                let parent = rel.parent();
+                if parent.is_none() || parent == Some(Path::new("")) {
+                    root_notes.push(path.clone());
+                } else if let Some(p) = parent {
+                    folder_map.entry(p.to_path_buf()).or_default().push(path.clone());
                 }
             }
         }
 
-        let folder_groups: Vec<(PathBuf, Vec<PathBuf>)> = folder_map.into_iter().collect();
+        // Merge vault.folders (includes empty dirs) with folder_map keys.
+        let all_folder_keys: BTreeSet<PathBuf> = if searching {
+            BTreeSet::new()
+        } else {
+            vault_folders.iter()
+                .cloned()
+                .chain(folder_map.keys().cloned())
+                .collect()
+        };
+
+        // Convert to an owned Vec so the scroll closure doesn't need to borrow
+        // folder_map and all_folder_keys simultaneously.
+        let folder_sections: Vec<(PathBuf, Vec<PathBuf>)> = all_folder_keys
+            .into_iter()
+            .map(|f| {
+                let notes = folder_map.remove(&f).unwrap_or_default();
+                (f, notes)
+            })
+            .collect();
 
         // ── Scroll area ─────────────────────────────────────────────────
         egui::ScrollArea::vertical().show(ui, |ui| {
-            // Root-level notes
-            for path in &root_notes {
-                note_entry(ui, path, active_path, accent, &mut action);
-            }
-
-            // Root new-note input (None folder)
-            if self.show_new_note_input && self.new_note_folder.is_none() {
-                let resp = ui.add(
-                    egui::TextEdit::singleline(&mut self.new_note_name)
-                        .hint_text("Note name…")
-                        .desired_width(f32::INFINITY),
-                );
-                resp.request_focus();
-                if resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    let name = self.new_note_name.trim().to_string();
-                    if !name.is_empty() {
-                        action = Some(SidebarAction::CreateNote(name));
-                        self.new_note_name.clear();
-                        self.show_new_note_input = false;
+            // ── Root notes drop zone ─────────────────────────────────────
+            let (_, root_drop) = ui.dnd_drop_zone::<PathBuf, _>(
+                egui::Frame::none(),
+                |ui| {
+                    for path in &root_notes {
+                        note_entry(ui, path, active_path, accent, note_pfx, vault_folders, &mut action);
                     }
-                }
-                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                    self.show_new_note_input = false;
-                    self.new_note_name.clear();
-                }
+
+                    // Root new-note input (no folder targeted).
+                    if self.show_new_note_input && self.new_note_folder.is_none() {
+                        let resp = ui.add(
+                            egui::TextEdit::singleline(&mut self.new_note_name)
+                                .hint_text("Note name…")
+                                .desired_width(f32::INFINITY),
+                        );
+                        resp.request_focus();
+                        if resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            let name = self.new_note_name.trim().to_string();
+                            if !name.is_empty() {
+                                action = Some(SidebarAction::CreateNote(name));
+                                self.new_note_name.clear();
+                                self.show_new_note_input = false;
+                            }
+                        }
+                        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            self.show_new_note_input = false;
+                            self.new_note_name.clear();
+                        }
+                    }
+                },
+            );
+            if let Some(dropped) = root_drop {
+                action = Some(SidebarAction::MoveNote((*dropped).clone(), None));
             }
 
-            if root_notes.is_empty() && folder_groups.is_empty() && !searching {
+            if root_notes.is_empty() && folder_sections.is_empty() && !searching {
                 ui.add_space(12.0);
                 ui.label(
                     RichText::new("No notes yet.\nClick + to create one.")
@@ -192,8 +220,8 @@ impl Sidebar {
                 );
             }
 
-            // ── Folder sections ─────────────────────────────────────────
-            for (folder_rel, folder_notes) in &folder_groups {
+            // ── Folder sections (each is a DnD drop zone) ─────────────
+            for (folder_rel, folder_notes) in &folder_sections {
                 let folder_name = folder_rel
                     .file_name()
                     .and_then(|s| s.to_str())
@@ -202,27 +230,46 @@ impl Sidebar {
 
                 ui.add_space(4.0);
 
-                // The body closure captures only local data — no `self` needed.
-                let cr = egui::CollapsingHeader::new(
-                    RichText::new(&folder_name).strong(),
-                )
-                .default_open(true)
-                .id_salt(folder_rel.display().to_string())
-                .show(ui, |ui| -> (Option<SidebarAction>, bool) {
-                    let mut inner: Option<SidebarAction> = None;
-                    for path in folder_notes {
-                        note_entry(ui, path, active_path, accent, &mut inner);
-                    }
-                    ui.add_space(2.0);
-                    let plus = ui
-                        .small_button("+ New note")
-                        .on_hover_text("New note in this section")
-                        .clicked();
-                    (inner, plus)
-                });
+                let header_label = if folder_pfx.is_empty() {
+                    RichText::new(&folder_name).strong()
+                } else {
+                    RichText::new(format!("{folder_pfx}{folder_name}")).strong()
+                };
 
-                // Process body return value — `self` is fine to use here (flat code).
-                if let Some((inner_action, plus_clicked)) = cr.body_returned {
+                let (dnd_inner, folder_drop) = ui.dnd_drop_zone::<PathBuf, _>(
+                    egui::Frame::none(),
+                    |ui| {
+                        egui::CollapsingHeader::new(header_label)
+                            .default_open(true)
+                            .id_salt(folder_rel.display().to_string())
+                            .show(ui, |ui| -> (Option<SidebarAction>, bool) {
+                                let mut inner: Option<SidebarAction> = None;
+
+                                if folder_notes.is_empty() {
+                                    ui.label(
+                                        RichText::new("No notes yet — click + to add one.")
+                                            .small()
+                                            .color(Color32::GRAY),
+                                    );
+                                } else {
+                                    for path in folder_notes {
+                                        note_entry(ui, path, active_path, accent, note_pfx, vault_folders, &mut inner);
+                                    }
+                                }
+
+                                ui.add_space(2.0);
+                                let plus = ui
+                                    .small_button("+ New note")
+                                    .on_hover_text("New note in this section")
+                                    .clicked();
+                                (inner, plus)
+                            })
+                    },
+                );
+
+                // Process CollapsingHeader body return.
+                if let Some(body_returned) = dnd_inner.inner.body_returned {
+                    let (inner_action, plus_clicked) = body_returned;
                     if inner_action.is_some() {
                         action = inner_action;
                     }
@@ -232,6 +279,14 @@ impl Sidebar {
                         self.new_note_name.clear();
                         self.show_new_folder_input = false;
                     }
+                }
+
+                // Handle drag-and-drop onto this folder.
+                if let Some(dropped) = folder_drop {
+                    action = Some(SidebarAction::MoveNote(
+                        (*dropped).clone(),
+                        Some(folder_rel.clone()),
+                    ));
                 }
 
                 // Per-folder new-note input — rendered right after the body.
@@ -269,14 +324,37 @@ impl Sidebar {
     }
 }
 
+// ── Icon helpers ──────────────────────────────────────────────────────────────
+
+fn note_prefix(style: &str) -> &'static str {
+    match style {
+        "emoji"   => "📝 ",
+        "ascii"   => "- ",
+        "bullets" => "• ",
+        "arrows"  => "→ ",
+        "none"    => "",
+        _         => "◦ ",   // "unicode" (default)
+    }
+}
+
+fn folder_prefix(style: &str) -> &'static str {
+    match style {
+        "emoji" => "📁 ",
+        _       => "",   // CollapsingHeader's ▸/▾ triangle is enough for other styles
+    }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Render a single note entry with click + right-click delete.
+/// Render a single note entry with drag support, click-to-open, and a
+/// right-click context menu with Delete and "Move to…" options.
 fn note_entry(
     ui: &mut Ui,
     path: &PathBuf,
     active_path: Option<&Path>,
     accent: egui::Color32,
+    icon_prefix: &str,
+    folders: &[PathBuf],
     action: &mut Option<SidebarAction>,
 ) {
     let stem = path
@@ -285,19 +363,75 @@ fn note_entry(
         .unwrap_or("?");
 
     let is_active = active_path.map(|p| p == path.as_path()).unwrap_or(false);
-    let label_text = if is_active {
-        RichText::new(stem).color(accent).strong()
+
+    let display = if icon_prefix.is_empty() {
+        stem.to_string()
     } else {
-        RichText::new(stem)
+        format!("{icon_prefix}{stem}")
     };
 
-    let resp = ui.selectable_label(is_active, label_text);
+    // Single widget with Sense::click_and_drag so both click-to-open and DnD work.
+    // selectable_label only has Sense::click, which is why the old dual-response
+    // approach got stuck: the drag overlay won pointer-down events and swallowed clicks.
+    let padding  = ui.spacing().button_padding;
+    let font_id  = egui::TextStyle::Button.resolve(ui.style());
+    let row_h    = ui.text_style_height(&egui::TextStyle::Button) + padding.y * 2.0;
+    let (rect, resp) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), row_h),
+        egui::Sense::click_and_drag(),
+    );
+
+    if ui.is_rect_visible(rect) {
+        let bg = if is_active {
+            ui.visuals().selection.bg_fill
+        } else if resp.hovered() {
+            ui.visuals().widgets.hovered.weak_bg_fill
+        } else {
+            Color32::TRANSPARENT
+        };
+        if bg != Color32::TRANSPARENT {
+            ui.painter().rect_filled(rect, 3.0, bg);
+        }
+        let text_color = if is_active { accent } else { ui.visuals().text_color() };
+        let galley = ui.fonts(|f| f.layout_no_wrap(display, font_id, text_color));
+        let text_pos = egui::pos2(
+            rect.left() + padding.x,
+            rect.center().y - galley.size().y * 0.5,
+        );
+        ui.painter_at(rect).galley(text_pos, galley, text_color);
+    }
+
+    resp.dnd_set_drag_payload(path.clone());
+
+    // Context menu: Move to… and Delete.
+    let path_clone = path.clone();
     resp.context_menu(|ui| {
+        // Move to… sub-menu (only shown when there are destinations).
+        if !folders.is_empty() {
+            ui.menu_button("Move to…", |ui| {
+                if ui.button("(Root)").clicked() {
+                    *action = Some(SidebarAction::MoveNote(path_clone.clone(), None));
+                    ui.close_menu();
+                }
+                for folder in folders {
+                    let name = folder.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+                    if ui.button(name).clicked() {
+                        *action = Some(SidebarAction::MoveNote(
+                            path_clone.clone(),
+                            Some(folder.clone()),
+                        ));
+                        ui.close_menu();
+                    }
+                }
+            });
+            ui.separator();
+        }
         if ui.button("Delete").clicked() {
-            *action = Some(SidebarAction::DeleteNote(path.clone()));
+            *action = Some(SidebarAction::DeleteNote(path_clone));
             ui.close_menu();
         }
     });
+
     if resp.clicked() {
         *action = Some(SidebarAction::OpenNote(path.clone()));
     }

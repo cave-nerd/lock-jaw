@@ -60,7 +60,7 @@ impl SettingsWindow {
             .open(&mut window_open)
             .resizable(false)
             .collapsible(false)
-            .default_size([520.0, 420.0])
+            .default_size([520.0, 460.0])
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
                 // ── Tab bar ──────────────────────────────────────────────
@@ -74,7 +74,7 @@ impl SettingsWindow {
 
                 // ── Tab content ──────────────────────────────────────────
                 egui::ScrollArea::vertical()
-                    .max_height(320.0)
+                    .max_height(360.0)
                     .show(ui, |ui| match self.tab {
                         Tab::General    => show_general(ui, &mut self.draft, &mut self.vault_path_str),
                         Tab::Editor     => show_editor(ui, &mut self.draft),
@@ -153,6 +153,21 @@ fn show_editor(ui: &mut Ui, draft: &mut Config) {
                     .step_by(0.1),
             );
             ui.end_row();
+
+            // ── Default view mode ─────────────────────────────────────────
+            ui.label("Default view:");
+            egui::ComboBox::from_id_salt("view_mode_combo")
+                .selected_text(view_mode_label(&draft.view_mode))
+                .show_ui(ui, |ui| {
+                    for (key, label) in [
+                        ("both",    "Editor + Preview"),
+                        ("editor",  "Editor only"),
+                        ("preview", "Preview only"),
+                    ] {
+                        ui.selectable_value(&mut draft.view_mode, key.to_string(), label);
+                    }
+                });
+            ui.end_row();
         });
 
     ui.add_space(12.0);
@@ -162,7 +177,7 @@ fn show_editor(ui: &mut Ui, draft: &mut Config) {
     let h1   = body * draft.heading_scale;
     let diff = h1 - body;
 
-    ui.label(RichText::new("Preview (approximate):").small().color(Color32::GRAY));
+    ui.label(RichText::new("Heading preview (approximate):").small().color(Color32::GRAY));
     ui.add_space(4.0);
 
     egui::Frame::none()
@@ -181,8 +196,9 @@ fn show_editor(ui: &mut Ui, draft: &mut Config) {
     ui.label(
         RichText::new(
             "Font size sets the base body size in both editor and preview.\n\
-             Heading scale controls how large H1 is relative to body text;\n\
-             sub-headings are interpolated between body and H1.",
+             Heading scale controls how large H1 is relative to body text.\n\
+             The view mode can also be toggled live using the E / E|P / P buttons\n\
+             in the top-right corner of the editor area.",
         )
         .small()
         .color(Color32::GRAY),
@@ -223,7 +239,6 @@ fn show_appearance(ui: &mut Ui, draft: &mut Config) {
     ui.label("Text color:");
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        // Color swatch preview
         let swatch_color = if is_valid_hex(&draft.text_color) {
             crate::theme::parse_color(&draft.text_color)
         } else {
@@ -249,11 +264,61 @@ fn show_appearance(ui: &mut Ui, draft: &mut Config) {
             .small()
             .color(Color32::GRAY),
     );
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    // ── Icon style (dropdown) ─────────────────────────────────────────
+    ui.label("Sidebar icons:");
+    ui.add_space(6.0);
+
+    egui::ComboBox::from_id_salt("icon_style_combo")
+        .selected_text(icon_style_label(&draft.icon_style))
+        .width(220.0)
+        .show_ui(ui, |ui| {
+            for (key, label) in [
+                ("emoji",   "📝 Emoji"),
+                ("unicode", "◦ Unicode symbols"),
+                ("bullets", "• Bullets"),
+                ("arrows",  "→ Arrows"),
+                ("ascii",   "- ASCII"),
+                ("none",    "No icons"),
+            ] {
+                ui.selectable_value(&mut draft.icon_style, key.to_string(), label);
+            }
+        });
+
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new("Controls the icon prefix shown next to notes and sections in the sidebar.")
+            .small()
+            .color(Color32::GRAY),
+    );
 }
 
 fn is_valid_hex(s: &str) -> bool {
     let h = s.trim_start_matches('#');
     h.len() == 6 && h.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn icon_style_label(style: &str) -> &'static str {
+    match style {
+        "emoji"   => "📝 Emoji",
+        "bullets" => "• Bullets",
+        "arrows"  => "→ Arrows",
+        "ascii"   => "- ASCII",
+        "none"    => "No icons",
+        _         => "◦ Unicode symbols",
+    }
+}
+
+fn view_mode_label(mode: &str) -> &'static str {
+    match mode {
+        "editor"  => "Editor only",
+        "preview" => "Preview only",
+        _         => "Editor + Preview",
+    }
 }
 
 fn show_sync(ui: &mut Ui, draft: &mut Config, pw_visible: &mut bool) {

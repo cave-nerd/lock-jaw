@@ -1,1 +1,17 @@
 /target/
+
+# AppImage build artifacts (appimagetool + extracted squashfs, output AppImage)
+/dist/squashfs-root/
+/dist/appimagetool
+/dist/*.AppImage
+/dist/LockJaw.AppDir/usr/
+
+# Flatpak build artifacts
+/flatpak-build/
+/flatpak-repo/
+/.flatpak-builder/
+
+# Editor / OS
+.DS_Store
+*.swp
+.vscode/
