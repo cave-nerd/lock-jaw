@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-appimage:
+    name: Build AppImage
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            build-essential pkg-config \
+            libssl-dev libgl-dev libfontconfig-dev \
+            libwayland-dev libxkbcommon-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxrandr-dev libxi-dev libudev-dev \
+            python3-pil
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build AppImage
+        run: ./build-appimage.sh
+
+      - name: Rename artifact with version tag
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          mv dist/LockJaw-x86_64.AppImage "LockJaw-${VERSION}-x86_64.AppImage"
+
+      - name: Create GitHub Release and upload AppImage
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LockJaw-*.AppImage
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
