@@ -1,0 +1,18 @@
+[meta]
+name = "Rosé Pine"
+dark = true
+
+[colors]
+bg_primary   = "#191724"
+bg_surface   = "#1f1d2e"
+bg_code      = "#12101e"
+fg_primary   = "#e0def4"
+fg_muted     = "#6e6a86"
+accent       = "#eb6f92"
+accent_muted = "#c4a7e7"
+success      = "#31748f"
+warning      = "#f6c177"
+error        = "#eb6f92"
+
+[editor]
+font_size = 14.0

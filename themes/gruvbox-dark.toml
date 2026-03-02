@@ -1,0 +1,18 @@
+[meta]
+name = "Gruvbox Dark"
+dark = true
+
+[colors]
+bg_primary   = "#282828"
+bg_surface   = "#3c3836"
+bg_code      = "#1d2021"
+fg_primary   = "#ebdbb2"
+fg_muted     = "#928374"
+accent       = "#b8bb26"
+accent_muted = "#d79921"
+success      = "#98971a"
+warning      = "#d79921"
+error        = "#cc241d"
+
+[editor]
+font_size = 14.0

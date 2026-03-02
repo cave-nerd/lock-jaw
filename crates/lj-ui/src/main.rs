@@ -1,5 +1,6 @@
 mod app;
 mod editor;
+mod settings;
 mod sidebar;
 mod theme;
 

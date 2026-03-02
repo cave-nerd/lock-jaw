@@ -1,0 +1,18 @@
+[meta]
+name = "Solarized Light"
+dark = false
+
+[colors]
+bg_primary   = "#fdf6e3"
+bg_surface   = "#eee8d5"
+bg_code      = "#e5dfcc"
+fg_primary   = "#657b83"
+fg_muted     = "#93a1a1"
+accent       = "#268bd2"
+accent_muted = "#2aa198"
+success      = "#859900"
+warning      = "#b58900"
+error        = "#dc322f"
+
+[editor]
+font_size = 14.0

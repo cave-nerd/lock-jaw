@@ -1,0 +1,18 @@
+[meta]
+name = "Solarized Dark"
+dark = true
+
+[colors]
+bg_primary   = "#002b36"
+bg_surface   = "#073642"
+bg_code      = "#00212b"
+fg_primary   = "#839496"
+fg_muted     = "#586e75"
+accent       = "#268bd2"
+accent_muted = "#2aa198"
+success      = "#859900"
+warning      = "#b58900"
+error        = "#dc322f"
+
+[editor]
+font_size = 14.0

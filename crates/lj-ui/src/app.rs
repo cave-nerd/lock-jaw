@@ -7,8 +7,9 @@ use tracing::{error, info};
 
 use crate::{
     editor::EditorPane,
+    settings::SettingsWindow,
     sidebar::{Sidebar, SidebarAction},
-    theme::Theme,
+    theme::{load_theme_by_name, resolve_system_theme, Theme},
 };
 
 pub struct LockJawApp {
@@ -19,24 +20,21 @@ pub struct LockJawApp {
     sidebar: Sidebar,
     editor: EditorPane,
     plugin_host: PluginHost,
+    settings: SettingsWindow,
     status_message: Option<String>,
     // WebDAV sync state
     sync_rx: Option<Receiver<anyhow::Result<webdav::SyncStats>>>,
     is_syncing: bool,
+    // System theme polling (check every ~300 frames ≈ 5 s at 60 fps)
+    system_theme_counter: u32,
 }
 
 impl LockJawApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let config = Config::load();
-        let theme = load_theme(&config);
+        let theme = load_theme_by_name(&config.theme);
         theme.apply(&cc.egui_ctx);
-
-        let mut style = (*cc.egui_ctx.style()).clone();
-        style.text_styles.insert(
-            egui::TextStyle::Body,
-            egui::FontId::proportional(config.font_size),
-        );
-        cc.egui_ctx.set_style(style);
+        apply_font_size(&cc.egui_ctx, config.font_size);
 
         let vault = open_vault(&config);
 
@@ -55,9 +53,11 @@ impl LockJawApp {
             sidebar: Sidebar::default(),
             editor: EditorPane::default(),
             plugin_host,
+            settings: SettingsWindow::default(),
             status_message: None,
             sync_rx: None,
             is_syncing: false,
+            system_theme_counter: 0,
         }
     }
 
@@ -101,13 +101,12 @@ impl LockJawApp {
         }
         if !self.config.webdav.enabled {
             self.status_message = Some(
-                "WebDAV disabled. Set webdav.enabled = true in config.toml".to_string(),
+                "WebDAV disabled. Open Settings → Sync to configure.".to_string(),
             );
             return;
         }
         if self.config.webdav.url.is_empty() {
-            self.status_message =
-                Some("WebDAV URL not set. Edit ~/.config/lockjaw/config.toml".to_string());
+            self.status_message = Some("WebDAV URL not set. Open Settings → Sync.".to_string());
             return;
         }
 
@@ -120,23 +119,17 @@ impl LockJawApp {
 
         std::thread::spawn(move || {
             let result = webdav::WebDavClient::new(webdav_config).and_then(|client| {
-                if let Some(root) = vault_root {
-                    client.sync(&root)
-                } else {
-                    anyhow::bail!("No vault open")
-                }
+                vault_root
+                    .map(|root| client.sync(&root))
+                    .unwrap_or_else(|| anyhow::bail!("No vault open"))
             });
             tx.send(result).ok();
         });
     }
 
     fn poll_sync(&mut self) {
-        let finished = if let Some(rx) = &self.sync_rx {
-            rx.try_recv().ok()
-        } else {
-            None
-        };
-        if let Some(result) = finished {
+        let done = self.sync_rx.as_ref().and_then(|rx| rx.try_recv().ok());
+        if let Some(result) = done {
             self.is_syncing = false;
             self.sync_rx = None;
             match result {
@@ -150,7 +143,7 @@ impl LockJawApp {
                         format!(", {} error(s)", stats.errors.len())
                     };
                     self.status_message = Some(format!(
-                        "Sync done: {} uploaded, {} downloaded{errs}",
+                        "Sync done: ↑{} ↓{}{errs}",
                         stats.uploaded, stats.downloaded
                     ));
                 }
@@ -160,20 +153,69 @@ impl LockJawApp {
             }
         }
     }
+
+    /// Poll OS dark/light preference and switch if it changed (system theme only).
+    fn poll_system_theme(&mut self, ctx: &egui::Context) {
+        if self.config.theme != "system" {
+            return;
+        }
+        self.system_theme_counter = self.system_theme_counter.wrapping_add(1);
+        if self.system_theme_counter % 300 != 0 {
+            return;
+        }
+        let new = resolve_system_theme();
+        if new.meta.dark != self.theme.meta.dark {
+            self.theme = new;
+            self.theme.apply(ctx);
+        }
+    }
+
+    /// Apply a saved config: reload theme, font, vault if needed, then persist.
+    fn apply_config(&mut self, new_config: Config, ctx: &egui::Context) {
+        // Theme
+        if new_config.theme != self.config.theme {
+            self.theme = load_theme_by_name(&new_config.theme);
+            self.theme.apply(ctx);
+            self.system_theme_counter = 0;
+        }
+        // Font size
+        if (new_config.font_size - self.config.font_size).abs() > 0.1 {
+            apply_font_size(ctx, new_config.font_size);
+        }
+        // Vault path
+        if new_config.vault_path != self.config.vault_path {
+            if self.open_note.as_ref().map(|n| n.dirty).unwrap_or(false) {
+                self.save_current_note();
+            }
+            self.open_note = None;
+            self.vault = open_vault(&new_config);
+        }
+
+        self.config = new_config;
+        if let Err(e) = self.config.save() {
+            self.status_message = Some(format!("Could not save config: {e}"));
+        }
+    }
 }
 
 impl eframe::App for LockJawApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Poll background sync thread
         self.poll_sync();
+        self.poll_system_theme(ctx);
 
-        // Global keyboard shortcuts
+        // Settings window (floating, before panels so it renders on top)
+        if let Some(new_config) = self.settings.show(ctx) {
+            self.apply_config(new_config, ctx);
+            self.status_message = Some("Settings saved.".to_string());
+        }
+
+        // Ctrl+S
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
             self.save_current_note();
         }
 
         let accent = self.theme.colors.accent.clone();
-        let muted = self.theme.colors.fg_muted.clone();
+        let muted  = self.theme.colors.fg_muted.clone();
         let font_size = self.theme.editor.font_size;
 
         // ── Menu bar ────────────────────────────────────────────────────
@@ -195,18 +237,9 @@ impl eframe::App for LockJawApp {
                     }
                 });
 
-                ui.menu_button("View", |ui| {
-                    if ui.button("Dark Theme").clicked() {
-                        self.theme = Theme::dark();
-                        self.theme.apply(ctx);
-                        ui.close_menu();
-                    }
-                    if ui.button("Light Theme").clicked() {
-                        self.theme = Theme::light();
-                        self.theme.apply(ctx);
-                        ui.close_menu();
-                    }
-                });
+                if ui.button("Settings").clicked() {
+                    self.settings.open(&self.config);
+                }
 
                 // Sync button
                 let sync_label = if self.is_syncing { "⟳ Syncing…" } else { "⟳ Sync" };
@@ -217,13 +250,10 @@ impl eframe::App for LockJawApp {
                 {
                     self.start_sync();
                 }
-
-                // Repaint every frame while syncing so the status updates
                 if self.is_syncing {
                     ctx.request_repaint();
                 }
 
-                // Plugin commands
                 let commands = self.plugin_host.commands();
                 if !commands.is_empty() {
                     ui.menu_button("Plugins", |ui| {
@@ -241,16 +271,15 @@ impl eframe::App for LockJawApp {
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if let Some(note) = &self.open_note {
-                    let word_count = lj_md::word_count(&note.body);
+                    let wc = lj_md::word_count(&note.body);
                     ui.label(format!("{}", note.path.display()));
                     ui.separator();
-                    ui.label(format!("{word_count} words"));
+                    ui.label(format!("{wc} words"));
                     if note.dirty {
                         ui.separator();
                         ui.label(
-                            egui::RichText::new("unsaved").color(crate::theme::parse_color(
-                                &self.theme.colors.warning,
-                            )),
+                            egui::RichText::new("unsaved")
+                                .color(crate::theme::parse_color(&self.theme.colors.warning)),
                         );
                     }
                 } else if let Some(ref vault) = self.vault {
@@ -264,6 +293,18 @@ impl eframe::App for LockJawApp {
                         ui.label(format!("{} plugin(s)", self.plugin_host.plugins.len()));
                         ui.separator();
                     }
+                    // Theme indicator
+                    let theme_name = crate::theme::THEMES
+                        .iter()
+                        .find(|(k, _)| *k == self.config.theme)
+                        .map(|(_, n)| *n)
+                        .unwrap_or(&self.config.theme);
+                    ui.label(
+                        egui::RichText::new(theme_name)
+                            .small()
+                            .color(crate::theme::parse_color(&muted)),
+                    );
+                    ui.separator();
                     if let Some(msg) = &self.status_message {
                         ui.label(msg);
                     }
@@ -281,7 +322,9 @@ impl eframe::App for LockJawApp {
                     self.sidebar.show(ui, vault, active_path, &accent, &muted)
                 } else {
                     ui.centered_and_justified(|ui| {
-                        ui.label("No vault open.\nEdit config.toml to set vault_path.");
+                        ui.label(
+                            "No vault open.\nOpen Settings → General to set a vault path.",
+                        );
                     });
                     None
                 }
@@ -342,22 +385,15 @@ impl eframe::App for LockJawApp {
     }
 }
 
-fn load_theme(config: &Config) -> Theme {
-    if let Some(themes_dir) = Config::themes_dir() {
-        let path = themes_dir.join(format!("{}.toml", config.theme));
-        if path.exists() {
-            if let Ok(s) = std::fs::read_to_string(&path) {
-                if let Ok(t) = toml::from_str::<Theme>(&s) {
-                    return t;
-                }
-            }
-        }
-    }
-    if config.theme == "light" {
-        Theme::light()
-    } else {
-        Theme::dark()
-    }
+// ── Free helpers ──────────────────────────────────────────────────────────────
+
+fn apply_font_size(ctx: &egui::Context, size: f32) {
+    let mut style = (*ctx.style()).clone();
+    style.text_styles.insert(
+        egui::TextStyle::Body,
+        egui::FontId::proportional(size),
+    );
+    ctx.set_style(style);
 }
 
 fn open_vault(config: &Config) -> Option<Vault> {

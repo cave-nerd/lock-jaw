@@ -1,0 +1,18 @@
+[meta]
+name = "Dracula"
+dark = true
+
+[colors]
+bg_primary   = "#282a36"
+bg_surface   = "#44475a"
+bg_code      = "#1e1f29"
+fg_primary   = "#f8f8f2"
+fg_muted     = "#6272a4"
+accent       = "#ff79c6"
+accent_muted = "#bd93f9"
+success      = "#50fa7b"
+warning      = "#f1fa8c"
+error        = "#ff5555"
+
+[editor]
+font_size = 14.0
