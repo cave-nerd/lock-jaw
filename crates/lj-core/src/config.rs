@@ -4,6 +4,8 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
+use crate::webdav::WebDavConfig;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Path to the notes vault directory.
@@ -12,6 +14,9 @@ pub struct Config {
     pub theme: String,
     /// Font size for the editor.
     pub font_size: f32,
+    /// WebDAV sync settings.
+    #[serde(default)]
+    pub webdav: WebDavConfig,
 }
 
 impl Default for Config {
@@ -24,6 +29,7 @@ impl Default for Config {
             vault_path,
             theme: "dark".to_string(),
             font_size: 14.0,
+            webdav: WebDavConfig::default(),
         }
     }
 }

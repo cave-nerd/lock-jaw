@@ -26,6 +26,9 @@ egui_commonmark = { version = "0.19", features = ["better_syntax_highlighting"] 
 egui = "0.30"
 eframe = { version = "0.30", features = ["default_fonts"] }
 
+# HTTP / WebDAV
+reqwest = { version = "0.12", features = ["blocking"] }
+
 # Utilities
 directories = "5"
 notify = "6"

@@ -54,7 +54,10 @@ impl Sidebar {
             ui.add_space(4.0);
             let response = ui.text_edit_singleline(&mut self.new_note_name);
             response.request_focus();
-            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            // Check Enter while focused (lost_focus + key_pressed don't fire in the same frame)
+            let pressed_enter = response.has_focus()
+                && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if pressed_enter {
                 if !self.new_note_name.trim().is_empty() {
                     action = Some(SidebarAction::CreateNote(self.new_note_name.trim().to_string()));
                     self.new_note_name.clear();

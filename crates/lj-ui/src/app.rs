@@ -1,6 +1,7 @@
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver};
 
-use lj_core::{Config, Note, Vault};
+use lj_core::{webdav, Config, Note, Vault};
 use lj_plugin::PluginHost;
 use tracing::{error, info};
 
@@ -19,6 +20,9 @@ pub struct LockJawApp {
     editor: EditorPane,
     plugin_host: PluginHost,
     status_message: Option<String>,
+    // WebDAV sync state
+    sync_rx: Option<Receiver<anyhow::Result<webdav::SyncStats>>>,
+    is_syncing: bool,
 }
 
 impl LockJawApp {
@@ -27,7 +31,6 @@ impl LockJawApp {
         let theme = load_theme(&config);
         theme.apply(&cc.egui_ctx);
 
-        // Set a slightly larger default font
         let mut style = (*cc.egui_ctx.style()).clone();
         style.text_styles.insert(
             egui::TextStyle::Body,
@@ -53,17 +56,17 @@ impl LockJawApp {
             editor: EditorPane::default(),
             plugin_host,
             status_message: None,
+            sync_rx: None,
+            is_syncing: false,
         }
     }
 
     fn save_current_note(&mut self) {
         if let Some(note) = self.open_note.as_mut() {
-            // Let plugins transform content before save
             let transformed = self
                 .plugin_host
                 .on_note_save(note.path.to_str().unwrap_or(""), note.raw.clone());
             note.raw = transformed;
-
             match note.save() {
                 Ok(_) => {
                     self.status_message = Some(format!("Saved: {}", note.display_name()));
@@ -78,14 +81,12 @@ impl LockJawApp {
     }
 
     fn open_note(&mut self, path: PathBuf) {
-        // Save current note first
         if self.open_note.as_ref().map(|n| n.dirty).unwrap_or(false) {
             self.save_current_note();
         }
         match Note::load(&path) {
             Ok(note) => {
-                self.plugin_host
-                    .on_note_open(path.to_str().unwrap_or(""));
+                self.plugin_host.on_note_open(path.to_str().unwrap_or(""));
                 self.open_note = Some(note);
             }
             Err(e) => {
@@ -93,10 +94,79 @@ impl LockJawApp {
             }
         }
     }
+
+    fn start_sync(&mut self) {
+        if self.is_syncing {
+            return;
+        }
+        if !self.config.webdav.enabled {
+            self.status_message = Some(
+                "WebDAV disabled. Set webdav.enabled = true in config.toml".to_string(),
+            );
+            return;
+        }
+        if self.config.webdav.url.is_empty() {
+            self.status_message =
+                Some("WebDAV URL not set. Edit ~/.config/lockjaw/config.toml".to_string());
+            return;
+        }
+
+        let (tx, rx) = mpsc::channel();
+        self.sync_rx = Some(rx);
+        self.is_syncing = true;
+
+        let webdav_config = self.config.webdav.clone();
+        let vault_root = self.vault.as_ref().map(|v| v.root.clone());
+
+        std::thread::spawn(move || {
+            let result = webdav::WebDavClient::new(webdav_config).and_then(|client| {
+                if let Some(root) = vault_root {
+                    client.sync(&root)
+                } else {
+                    anyhow::bail!("No vault open")
+                }
+            });
+            tx.send(result).ok();
+        });
+    }
+
+    fn poll_sync(&mut self) {
+        let finished = if let Some(rx) = &self.sync_rx {
+            rx.try_recv().ok()
+        } else {
+            None
+        };
+        if let Some(result) = finished {
+            self.is_syncing = false;
+            self.sync_rx = None;
+            match result {
+                Ok(stats) => {
+                    if let Some(vault) = self.vault.as_mut() {
+                        vault.refresh().ok();
+                    }
+                    let errs = if stats.errors.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", {} error(s)", stats.errors.len())
+                    };
+                    self.status_message = Some(format!(
+                        "Sync done: {} uploaded, {} downloaded{errs}",
+                        stats.uploaded, stats.downloaded
+                    ));
+                }
+                Err(e) => {
+                    self.status_message = Some(format!("Sync failed: {e}"));
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for LockJawApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll background sync thread
+        self.poll_sync();
+
         // Global keyboard shortcuts
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
             self.save_current_note();
@@ -104,10 +174,9 @@ impl eframe::App for LockJawApp {
 
         let accent = self.theme.colors.accent.clone();
         let muted = self.theme.colors.fg_muted.clone();
-        let code_bg = self.theme.colors.bg_code.clone();
         let font_size = self.theme.editor.font_size;
 
-        // Top menu bar
+        // ── Menu bar ────────────────────────────────────────────────────
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -139,13 +208,27 @@ impl eframe::App for LockJawApp {
                     }
                 });
 
+                // Sync button
+                let sync_label = if self.is_syncing { "⟳ Syncing…" } else { "⟳ Sync" };
+                if ui
+                    .add_enabled(!self.is_syncing, egui::Button::new(sync_label))
+                    .on_hover_text("Sync notes with WebDAV server")
+                    .clicked()
+                {
+                    self.start_sync();
+                }
+
+                // Repaint every frame while syncing so the status updates
+                if self.is_syncing {
+                    ctx.request_repaint();
+                }
+
                 // Plugin commands
                 let commands = self.plugin_host.commands();
                 if !commands.is_empty() {
                     ui.menu_button("Plugins", |ui| {
                         for cmd in &commands {
                             if ui.button(&cmd.name).clicked() {
-                                // TODO(Phase 2): dispatch command
                                 ui.close_menu();
                             }
                         }
@@ -154,7 +237,7 @@ impl eframe::App for LockJawApp {
             });
         });
 
-        // Status bar
+        // ── Status bar ──────────────────────────────────────────────────
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if let Some(note) = &self.open_note {
@@ -165,8 +248,9 @@ impl eframe::App for LockJawApp {
                     if note.dirty {
                         ui.separator();
                         ui.label(
-                            egui::RichText::new("unsaved")
-                                .color(crate::theme::parse_color(&self.theme.colors.warning)),
+                            egui::RichText::new("unsaved").color(crate::theme::parse_color(
+                                &self.theme.colors.warning,
+                            )),
                         );
                     }
                 } else if let Some(ref vault) = self.vault {
@@ -175,25 +259,19 @@ impl eframe::App for LockJawApp {
                     ui.label("No vault open");
                 }
 
-                if let Some(msg) = &self.status_message {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !self.plugin_host.plugins.is_empty() {
+                        ui.label(format!("{} plugin(s)", self.plugin_host.plugins.len()));
+                        ui.separator();
+                    }
+                    if let Some(msg) = &self.status_message {
                         ui.label(msg);
-                    });
-                }
-
-                // Plugin count
-                if !self.plugin_host.plugins.is_empty() {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(format!(
-                            "{} plugin(s)",
-                            self.plugin_host.plugins.len()
-                        ));
-                    });
-                }
+                    }
+                });
             });
         });
 
-        // Sidebar
+        // ── Sidebar ─────────────────────────────────────────────────────
         let sidebar_action = egui::SidePanel::left("sidebar")
             .resizable(true)
             .default_width(200.0)
@@ -202,7 +280,6 @@ impl eframe::App for LockJawApp {
                     let active_path = self.open_note.as_ref().map(|n| n.path.as_path());
                     self.sidebar.show(ui, vault, active_path, &accent, &muted)
                 } else {
-                    // No vault — show open vault prompt
                     ui.centered_and_justified(|ui| {
                         ui.label("No vault open.\nEdit config.toml to set vault_path.");
                     });
@@ -211,11 +288,9 @@ impl eframe::App for LockJawApp {
             })
             .inner;
 
-        // Handle sidebar actions
         match sidebar_action {
             Some(SidebarAction::OpenNote(path)) => {
                 self.open_note(path);
-                // clear status after navigating
                 self.status_message = None;
             }
             Some(SidebarAction::CreateNote(name)) => {
@@ -238,7 +313,7 @@ impl eframe::App for LockJawApp {
                     if let Err(e) = vault.delete_note(&path) {
                         self.status_message = Some(format!("Error deleting: {e}"));
                     } else {
-                        if self.open_note.as_ref().map(|n| &n.path == &path).unwrap_or(false) {
+                        if self.open_note.as_ref().map(|n| n.path == path).unwrap_or(false) {
                             self.open_note = None;
                         }
                         self.status_message = Some("Note deleted.".to_string());
@@ -248,16 +323,18 @@ impl eframe::App for LockJawApp {
             None => {}
         }
 
-        // Central editor panel
+        // ── Central editor panel ─────────────────────────────────────────
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(note) = self.open_note.as_mut() {
-                self.editor.show(ui, note, font_size, &code_bg);
+                self.editor.show(ui, note, font_size);
             } else {
                 ui.centered_and_justified(|ui| {
                     ui.label(
-                        egui::RichText::new("Lock Jaw\n\nSelect or create a note to get started.")
-                            .size(18.0)
-                            .color(crate::theme::parse_color(&muted)),
+                        egui::RichText::new(
+                            "Lock Jaw\n\nSelect or create a note to get started.",
+                        )
+                        .size(18.0)
+                        .color(crate::theme::parse_color(&muted)),
                     );
                 });
             }
@@ -266,7 +343,6 @@ impl eframe::App for LockJawApp {
 }
 
 fn load_theme(config: &Config) -> Theme {
-    // Try user theme dir first
     if let Some(themes_dir) = Config::themes_dir() {
         let path = themes_dir.join(format!("{}.toml", config.theme));
         if path.exists() {
@@ -277,7 +353,6 @@ fn load_theme(config: &Config) -> Theme {
             }
         }
     }
-    // Fall back to bundled themes
     if config.theme == "light" {
         Theme::light()
     } else {
