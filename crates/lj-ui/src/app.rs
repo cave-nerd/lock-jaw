@@ -34,7 +34,7 @@ impl LockJawApp {
         let config = Config::load();
         let theme = load_theme_by_name(&config.theme);
         theme.apply(&cc.egui_ctx);
-        apply_font_size(&cc.egui_ctx, config.font_size);
+        apply_text_styles(&cc.egui_ctx, config.font_size, config.heading_scale);
 
         let vault = open_vault(&config);
 
@@ -178,9 +178,11 @@ impl LockJawApp {
             self.theme.apply(ctx);
             self.system_theme_counter = 0;
         }
-        // Font size
-        if (new_config.font_size - self.config.font_size).abs() > 0.1 {
-            apply_font_size(ctx, new_config.font_size);
+        // Font size / heading scale
+        let font_changed = (new_config.font_size - self.config.font_size).abs() > 0.1;
+        let heading_changed = (new_config.heading_scale - self.config.heading_scale).abs() > 0.05;
+        if font_changed || heading_changed {
+            apply_text_styles(ctx, new_config.font_size, new_config.heading_scale);
         }
         // Vault path
         if new_config.vault_path != self.config.vault_path {
@@ -387,10 +389,21 @@ impl eframe::App for LockJawApp {
 
 // ── Free helpers ──────────────────────────────────────────────────────────────
 
-fn apply_font_size(ctx: &egui::Context, size: f32) {
+/// Set Body and Heading text styles so the preview pane has clear heading hierarchy.
+/// H1 = size × scale, then egui_commonmark interpolates H2–H6 between Body and Heading.
+fn apply_text_styles(ctx: &egui::Context, size: f32, heading_scale: f32) {
     let mut style = (*ctx.style()).clone();
     style.text_styles.insert(
         egui::TextStyle::Body,
+        egui::FontId::proportional(size),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Heading,
+        egui::FontId::proportional(size * heading_scale),
+    );
+    // Keep Button in sync with body so toolbar labels feel consistent.
+    style.text_styles.insert(
+        egui::TextStyle::Button,
         egui::FontId::proportional(size),
     );
     ctx.set_style(style);
