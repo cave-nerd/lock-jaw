@@ -1,0 +1,8 @@
+[package]
+name = "lj-md"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+egui = { workspace = true }
+egui_commonmark = { workspace = true }

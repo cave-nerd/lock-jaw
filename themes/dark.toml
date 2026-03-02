@@ -1,0 +1,18 @@
+[meta]
+name = "Lock Jaw Dark"
+dark = true
+
+[colors]
+bg_primary   = "#1a1a2e"
+bg_surface   = "#16213e"
+bg_code      = "#0d0d1a"
+fg_primary   = "#e0e0e0"
+fg_muted     = "#6c6c8a"
+accent       = "#e94560"
+accent_muted = "#533483"
+success      = "#4caf50"
+warning      = "#ff9800"
+error        = "#f44336"
+
+[editor]
+font_size = 14.0

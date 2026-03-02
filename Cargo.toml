@@ -1,0 +1,35 @@
+[workspace]
+members = [
+    "crates/lj-core",
+    "crates/lj-md",
+    "crates/lj-plugin",
+    "crates/lj-ui",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Lock Jaw Contributors"]
+license = "MIT"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+serde_yaml = "0.9"
+
+# Markdown — egui_commonmark 0.19 requires egui 0.30
+egui_commonmark = { version = "0.19", features = ["better_syntax_highlighting"] }
+
+# GUI — must match egui_commonmark's egui requirement
+egui = "0.30"
+eframe = { version = "0.30", features = ["default_fonts"] }
+
+# Utilities
+directories = "5"
+notify = "6"
+fuzzy-matcher = "0.3"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

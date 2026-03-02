@@ -1,0 +1,12 @@
+[package]
+name = "lj-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+toml = { workspace = true }
+serde_yaml = { workspace = true }
+directories = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }

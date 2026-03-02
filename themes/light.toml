@@ -1,0 +1,18 @@
+[meta]
+name = "Lock Jaw Light"
+dark = false
+
+[colors]
+bg_primary   = "#fafafa"
+bg_surface   = "#f0f0f0"
+bg_code      = "#e8e8e8"
+fg_primary   = "#1a1a2e"
+fg_muted     = "#666688"
+accent       = "#c0392b"
+accent_muted = "#6c3483"
+success      = "#27ae60"
+warning      = "#f39c12"
+error        = "#e74c3c"
+
+[editor]
+font_size = 14.0
