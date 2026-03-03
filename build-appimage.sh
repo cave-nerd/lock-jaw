@@ -57,10 +57,8 @@ Keywords=notes;markdown;editor;text;
 StartupNotify=true
 DESKTOP
 
-# Icon — always regenerate from the canonical source in dist/
-ICON_SRC="$SCRIPT_DIR/dist/LockJaw.AppDir/lockjaw.png"
-if [ ! -f "$ICON_SRC" ]; then
-    LJ_ICON_OUT="$ICON_SRC" python3 -c "
+# Icon — generate directly into AppDir
+LJ_ICON_OUT="$APPDIR/lockjaw.png" python3 -c "
 import os
 from PIL import Image, ImageDraw
 size=256; img=Image.new('RGBA',(size,size),(0,0,0,0)); draw=ImageDraw.Draw(img)
@@ -72,9 +70,7 @@ draw.ellipse([cx-16,142,cx+16,174],fill=(26,26,46,255))
 draw.rectangle([cx-7,158,cx+7,180],fill=(26,26,46,255))
 img.save(os.environ['LJ_ICON_OUT'])
 print('    icon written')
-" || echo "    WARNING: PIL not available; add lockjaw.png to dist/LockJaw.AppDir/ manually"
-fi
-cp "$ICON_SRC" "$APPDIR/lockjaw.png"
+" || echo "    WARNING: PIL not available; add lockjaw.png to $APPDIR/ manually"
 
 # ── 3. Ensure appimagetool is extracted ──────────────────────────────────────
 if [ ! -f "$APPIMAGETOOL_EXTRACT/AppRun" ]; then
