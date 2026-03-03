@@ -48,6 +48,7 @@ impl WebDavClient {
     pub fn new(config: WebDavConfig) -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
+            .https_only(true)   // reject any non-TLS WebDAV URL
             .build()?;
         let base_url = if config.url.ends_with('/') {
             config.url.clone()

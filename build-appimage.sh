@@ -60,7 +60,8 @@ DESKTOP
 # Icon — always regenerate from the canonical source in dist/
 ICON_SRC="$SCRIPT_DIR/dist/LockJaw.AppDir/lockjaw.png"
 if [ ! -f "$ICON_SRC" ]; then
-    python3 -c "
+    LJ_ICON_OUT="$ICON_SRC" python3 -c "
+import os
 from PIL import Image, ImageDraw
 size=256; img=Image.new('RGBA',(size,size),(0,0,0,0)); draw=ImageDraw.Draw(img)
 cx=size//2
@@ -69,7 +70,7 @@ draw.arc([cx-40,40,cx+40,110],start=180,end=0,fill=(233,69,96,255),width=16)
 draw.rounded_rectangle([cx-52,118,cx+52,210],radius=14,fill=(233,69,96,255))
 draw.ellipse([cx-16,142,cx+16,174],fill=(26,26,46,255))
 draw.rectangle([cx-7,158,cx+7,180],fill=(26,26,46,255))
-img.save('$ICON_SRC')
+img.save(os.environ['LJ_ICON_OUT'])
 print('    icon written')
 " || echo "    WARNING: PIL not available; add lockjaw.png to dist/LockJaw.AppDir/ manually"
 fi
