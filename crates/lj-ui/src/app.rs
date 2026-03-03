@@ -33,7 +33,8 @@ pub struct LockJawApp {
 
 impl LockJawApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let config = Config::load();
+        let mut config = Config::load();
+        config.webdav.hydrate(); // load password from OS keyring, not from disk
         let theme = load_theme_by_name(&config.theme);
         theme.apply(&cc.egui_ctx);
         apply_text_styles(&cc.egui_ctx, config.font_size, config.heading_scale);
@@ -237,6 +238,10 @@ impl LockJawApp {
             self.vault = open_vault(&new_config);
         }
 
+        // Persist WebDAV password to OS keyring (never written to config.toml).
+        if let Err(e) = new_config.webdav.save_password() {
+            self.status_message = Some(format!("Keyring error: {e}"));
+        }
         self.config = new_config;
         if let Err(e) = self.config.save() {
             self.status_message = Some(format!("Could not save config: {e}"));

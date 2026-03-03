@@ -7,7 +7,14 @@ use reqwest::blocking::Client;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
+const KEYRING_SERVICE: &str = "io.lockjaw.LockJaw";
+const KEYRING_ACCOUNT: &str = "webdav-password";
+
 /// WebDAV connection settings, stored in config.toml under `[webdav]`.
+///
+/// The `password` field is **never** written to disk — it is stored in the
+/// OS keyring (GNOME Keyring / KWallet on Linux, Keychain on macOS) and loaded
+/// at runtime via [`WebDavConfig::hydrate`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebDavConfig {
     /// Enable or disable syncing.
@@ -15,6 +22,9 @@ pub struct WebDavConfig {
     /// Full URL to the remote notes directory, e.g. `https://cloud.example.com/dav/notes/`
     pub url: String,
     pub username: String,
+    /// In-memory only — not persisted to config.toml.
+    /// Call [`WebDavConfig::hydrate`] after loading config to populate from keyring.
+    #[serde(skip)]
     pub password: String,
 }
 
@@ -26,6 +36,36 @@ impl Default for WebDavConfig {
             username: String::new(),
             password: String::new(),
         }
+    }
+}
+
+impl WebDavConfig {
+    /// Load the password from the OS keyring into `self.password`.
+    /// Call this once after deserialising from config.toml.
+    pub fn hydrate(&mut self) {
+        self.password = self.load_password();
+    }
+
+    /// Read the stored password from the keyring (returns empty string on any error).
+    pub fn load_password(&self) -> String {
+        match keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+            .and_then(|e| e.get_password())
+        {
+            Ok(pw) => pw,
+            Err(_) => String::new(),
+        }
+    }
+
+    /// Persist `self.password` to the OS keyring.
+    /// If the password is empty the keyring entry is deleted (if it exists).
+    pub fn save_password(&self) -> anyhow::Result<()> {
+        let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)?;
+        if self.password.is_empty() {
+            entry.delete_credential().ok(); // ignore "not found"
+        } else {
+            entry.set_password(&self.password)?;
+        }
+        Ok(())
     }
 }
 

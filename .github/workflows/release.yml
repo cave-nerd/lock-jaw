@@ -22,6 +22,7 @@ jobs:
             libwayland-dev libxkbcommon-dev \
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxrandr-dev libxi-dev libudev-dev \
+            libdbus-1-dev \
             python3-pil
 
       - name: Install Rust toolchain

@@ -11,3 +11,4 @@ directories = { workspace = true }
 reqwest = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+keyring = "3"
