@@ -1,4 +1,4 @@
-app-id: io.lockjaw.LockJaw
+app-id: io.github.cave_nerd.LockJaw
 runtime: org.freedesktop.Platform
 runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
@@ -25,24 +25,25 @@ modules:
       # Binary
       - install -Dm755 lockjaw /app/bin/lockjaw
       # Desktop entry
-      - install -Dm644 io.lockjaw.LockJaw.desktop /app/share/applications/io.lockjaw.LockJaw.desktop
+      - install -Dm644 io.github.cave_nerd.LockJaw.desktop
+          /app/share/applications/io.github.cave_nerd.LockJaw.desktop
       # Icons
       - install -Dm644 lockjaw-256.png
-          /app/share/icons/hicolor/256x256/apps/io.lockjaw.LockJaw.png
+          /app/share/icons/hicolor/256x256/apps/io.github.cave_nerd.LockJaw.png
       # AppStream metainfo
-      - install -Dm644 io.lockjaw.LockJaw.metainfo.xml
-          /app/share/metainfo/io.lockjaw.LockJaw.metainfo.xml
+      - install -Dm644 io.github.cave_nerd.LockJaw.metainfo.xml
+          /app/share/metainfo/io.github.cave_nerd.LockJaw.metainfo.xml
 
     sources:
       - type: file
         path: target/release/lockjaw
 
       - type: file
-        path: io.lockjaw.LockJaw.desktop
+        path: io.github.cave_nerd.LockJaw.desktop
 
       - type: file
         path: dist/LockJaw.AppDir/lockjaw.png
         dest-filename: lockjaw-256.png
 
       - type: file
-        path: io.lockjaw.LockJaw.metainfo.xml
+        path: io.github.cave_nerd.LockJaw.metainfo.xml

@@ -7,7 +7,7 @@ use reqwest::blocking::Client;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
-const KEYRING_SERVICE: &str = "io.lockjaw.LockJaw";
+const KEYRING_SERVICE: &str = "io.github.cave_nerd.LockJaw";
 const KEYRING_ACCOUNT: &str = "webdav-password";
 
 /// WebDAV connection settings, stored in config.toml under `[webdav]`.

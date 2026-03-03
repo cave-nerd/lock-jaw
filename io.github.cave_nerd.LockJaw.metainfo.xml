@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.lockjaw.LockJaw</id>
+  <id>io.github.cave_nerd.LockJaw</id>
   <name>Lock Jaw</name>
   <summary>Fast, local-first markdown note-taking</summary>
   <metadata_license>MIT</metadata_license>
@@ -15,9 +15,9 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">io.lockjaw.LockJaw.desktop</launchable>
+  <launchable type="desktop-id">io.github.cave_nerd.LockJaw.desktop</launchable>
 
-  <url type="homepage">https://github.com/lockjaw/lockjaw</url>
+  <url type="homepage">https://github.com/cave-nerd/lock-jaw</url>
 
   <categories>
     <category>Utility</category>

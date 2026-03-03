@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-MANIFEST="io.lockjaw.LockJaw.yml"
+MANIFEST="io.github.cave_nerd.LockJaw.yml"
 BUILD_DIR="flatpak-build"
 REPO_DIR="flatpak-repo"
 
@@ -29,15 +29,15 @@ if [[ "$1" == "--install" ]]; then
     echo "==> Installing Flatpak for current user..."
     flatpak --user remote-add --no-gpg-verify --if-not-exists \
         lockjaw-local "$REPO_DIR"
-    flatpak --user install --reinstall -y lockjaw-local io.lockjaw.LockJaw
+    flatpak --user install --reinstall -y lockjaw-local io.github.cave_nerd.LockJaw
     echo ""
     echo "Installed! Run with:"
-    echo "  flatpak run io.lockjaw.LockJaw"
+    echo "  flatpak run io.github.cave_nerd.LockJaw"
 else
     echo ""
     echo "Build complete.  To install and run:"
     echo "  ./build-flatpak.sh --install"
-    echo "  flatpak run io.lockjaw.LockJaw"
+    echo "  flatpak run io.github.cave_nerd.LockJaw"
     echo ""
     echo "Or to test without installing:"
     echo "  flatpak-builder --run $BUILD_DIR $MANIFEST lockjaw"
