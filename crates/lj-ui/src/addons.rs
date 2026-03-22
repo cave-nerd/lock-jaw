@@ -21,7 +21,10 @@ pub struct AddonsWindow {
 
 impl Default for AddonsWindow {
     fn default() -> Self {
-        Self { open: false, confirm_remove: None }
+        Self {
+            open: false,
+            confirm_remove: None,
+        }
     }
 }
 
@@ -159,7 +162,11 @@ fn plugin_row(
         );
 
         if is_disabled {
-            ui.label(RichText::new("disabled").small().color(Color32::from_rgb(160, 120, 60)));
+            ui.label(
+                RichText::new("disabled")
+                    .small()
+                    .color(Color32::from_rgb(160, 120, 60)),
+            );
         }
 
         // Remove button / confirmation (right-aligned)
@@ -170,7 +177,11 @@ fn plugin_row(
                     *confirm_remove = None;
                 }
                 if ui
-                    .button(RichText::new("⚠ Confirm remove").small().color(Color32::RED))
+                    .button(
+                        RichText::new("⚠ Confirm remove")
+                            .small()
+                            .color(Color32::RED),
+                    )
                     .clicked()
                 {
                     *action = Some(AddonsAction::Remove(name.clone()));
@@ -183,8 +194,18 @@ fn plugin_row(
     });
 
     // Description + author (second line)
-    let has_desc   = plugin.manifest.description.as_deref().map(|d| !d.is_empty()).unwrap_or(false);
-    let has_author = plugin.manifest.author.as_deref().map(|a| !a.is_empty()).unwrap_or(false);
+    let has_desc = plugin
+        .manifest
+        .description
+        .as_deref()
+        .map(|d| !d.is_empty())
+        .unwrap_or(false);
+    let has_author = plugin
+        .manifest
+        .author
+        .as_deref()
+        .map(|a| !a.is_empty())
+        .unwrap_or(false);
 
     if has_desc || has_author {
         ui.add_space(2.0);

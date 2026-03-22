@@ -12,3 +12,4 @@ reqwest = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 keyring = "3"
+percent-encoding = "2.3.2"

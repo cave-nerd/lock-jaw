@@ -31,7 +31,9 @@ pub struct ThemeMeta {
     pub dark: bool,
 }
 
-fn default_dark() -> bool { true }
+fn default_dark() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeColors {
@@ -53,7 +55,9 @@ pub struct ThemeEditor {
 }
 
 impl Default for ThemeEditor {
-    fn default() -> Self { Self { font_size: 14.0 } }
+    fn default() -> Self {
+        Self { font_size: 14.0 }
+    }
 }
 
 // ── Bundled theme constructors ────────────────────────────────────────────────
@@ -87,11 +91,11 @@ impl Theme {
     /// Apply this theme to an egui Context.
     pub fn apply(&self, ctx: &egui::Context) {
         let c = &self.colors;
-        let bg      = parse_color(&c.bg_primary);
+        let bg = parse_color(&c.bg_primary);
         let surface = parse_color(&c.bg_surface);
-        let fg      = parse_color(&c.fg_primary);
-        let accent  = parse_color(&c.accent);
-        let muted   = parse_color(&c.fg_muted);
+        let fg = parse_color(&c.fg_primary);
+        let accent = parse_color(&c.accent);
+        let muted = parse_color(&c.fg_muted);
 
         let mut visuals = if self.meta.dark {
             egui::Visuals::dark()
@@ -99,24 +103,46 @@ impl Theme {
             egui::Visuals::light()
         };
 
-        visuals.window_fill      = bg;
-        visuals.panel_fill       = bg;
-        visuals.faint_bg_color   = surface;
+        visuals.window_fill = bg;
+        visuals.panel_fill = bg;
+        visuals.faint_bg_color = surface;
         visuals.extreme_bg_color = parse_color(&c.bg_code);
 
-        visuals.widgets.noninteractive.bg_fill   = surface;
+        visuals.widgets.noninteractive.bg_fill = surface;
         visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, fg);
-        visuals.widgets.inactive.bg_fill         = surface;
-        visuals.widgets.inactive.fg_stroke       = egui::Stroke::new(1.0, muted);
-        visuals.widgets.hovered.bg_fill          = lerp_color(surface, accent, 0.15);
-        visuals.widgets.hovered.fg_stroke        = egui::Stroke::new(1.0, fg);
-        visuals.widgets.active.bg_fill           = lerp_color(surface, accent, 0.3);
-        visuals.widgets.active.fg_stroke         = egui::Stroke::new(1.5, fg);
-        visuals.selection.bg_fill                = accent.linear_multiply(0.35);
-        visuals.selection.stroke                 = egui::Stroke::new(1.0, accent);
-        visuals.hyperlink_color                  = accent;
+        visuals.widgets.inactive.bg_fill = surface;
+        visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, muted);
+        visuals.widgets.hovered.bg_fill = lerp_color(surface, accent, 0.15);
+        visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, fg);
+        visuals.widgets.active.bg_fill = lerp_color(surface, accent, 0.3);
+        visuals.widgets.active.fg_stroke = egui::Stroke::new(1.5, fg);
+        visuals.selection.bg_fill = accent.linear_multiply(0.35);
+        visuals.selection.stroke = egui::Stroke::new(1.0, accent);
+        visuals.hyperlink_color = accent;
 
-        ctx.set_visuals(visuals);
+        // Modern visual polish
+        visuals.window_rounding = egui::Rounding::same(8.0);
+        visuals.menu_rounding = egui::Rounding::same(6.0);
+        visuals.window_shadow = egui::epaint::Shadow {
+            offset: [0.0, 8.0].into(),
+            blur: 32.0,
+            spread: 0.0,
+            color: egui::Color32::from_black_alpha(96),
+        };
+        visuals.popup_shadow = egui::epaint::Shadow {
+            offset: [0.0, 4.0].into(),
+            blur: 16.0,
+            spread: 0.0,
+            color: egui::Color32::from_black_alpha(96),
+        };
+
+        let mut style = (*ctx.style()).clone();
+        style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+        style.spacing.button_padding = egui::vec2(8.0, 6.0);
+        style.spacing.menu_margin = egui::Margin::same(6.0);
+
+        style.visuals = visuals;
+        ctx.set_style(style);
     }
 }
 
@@ -140,15 +166,15 @@ pub fn load_theme_by_name(name: &str) -> Theme {
         }
     }
     match name {
-        "light"           => Theme::light(),
-        "nord"            => Theme::nord(),
-        "dracula"         => Theme::dracula(),
-        "solarized-dark"  => Theme::solarized_dark(),
+        "light" => Theme::light(),
+        "nord" => Theme::nord(),
+        "dracula" => Theme::dracula(),
+        "solarized-dark" => Theme::solarized_dark(),
         "solarized-light" => Theme::solarized_light(),
-        "gruvbox-dark"    => Theme::gruvbox_dark(),
-        "rose-pine"       => Theme::rose_pine(),
-        "system"          => resolve_system_theme(),
-        _                 => Theme::dark(),
+        "gruvbox-dark" => Theme::gruvbox_dark(),
+        "rose-pine" => Theme::rose_pine(),
+        "system" => resolve_system_theme(),
+        _ => Theme::dark(),
     }
 }
 
@@ -163,21 +189,23 @@ pub fn resolve_system_theme() -> Theme {
 /// Representative accent swatch color for each theme key — used in the settings UI.
 pub fn theme_accent(key: &str) -> Color32 {
     match key {
-        "light"                              => parse_color("#c0392b"),
-        "nord"                               => parse_color("#88c0d0"),
-        "dracula"                            => parse_color("#ff79c6"),
+        "light" => parse_color("#c0392b"),
+        "nord" => parse_color("#88c0d0"),
+        "dracula" => parse_color("#ff79c6"),
         "solarized-dark" | "solarized-light" => parse_color("#268bd2"),
-        "gruvbox-dark"                       => parse_color("#b8bb26"),
-        "rose-pine"                          => parse_color("#eb6f92"),
-        "system"                             => Color32::GRAY,
-        _                                    => parse_color("#e94560"),
+        "gruvbox-dark" => parse_color("#b8bb26"),
+        "rose-pine" => parse_color("#eb6f92"),
+        "system" => Color32::GRAY,
+        _ => parse_color("#e94560"),
     }
 }
 
 /// Parse a `#rrggbb` hex color string into `Color32`.
 pub fn parse_color(hex: &str) -> Color32 {
     let h = hex.trim_start_matches('#');
-    if h.len() != 6 { return Color32::WHITE; }
+    if h.len() != 6 {
+        return Color32::WHITE;
+    }
     let r = u8::from_str_radix(&h[0..2], 16).unwrap_or(0);
     let g = u8::from_str_radix(&h[2..4], 16).unwrap_or(0);
     let b = u8::from_str_radix(&h[4..6], 16).unwrap_or(0);

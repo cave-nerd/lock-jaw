@@ -1,16 +1,17 @@
 #!/bin/bash
-# Build LockJaw-x86_64.AppImage
-# Usage: ./build-appimage.sh [--release]
+# Build LockJaw AppImage (arch-aware: x86_64 and aarch64)
+# Usage: ./build-appimage.sh
 set -e
 
+ARCH="${ARCH:-$(uname -m)}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST="$SCRIPT_DIR/dist"
 APPDIR="$DIST/LockJaw.AppDir"
-OUTPUT="$DIST/LockJaw-x86_64.AppImage"
-APPIMAGETOOL_EXTRACT="$DIST/squashfs-root"
+OUTPUT="$DIST/LockJaw-${ARCH}.AppImage"
+APPIMAGETOOL_EXTRACT="$DIST/squashfs-root-${ARCH}"
 
 # ── 1. Build the Rust binary ────────────────────────────────────────────────
-echo "==> Building lockjaw (release)..."
+echo "==> Building lockjaw (release) for ${ARCH}..."
 cd "$SCRIPT_DIR"
 cargo build --release -p lj-ui
 
@@ -23,8 +24,8 @@ cp target/release/lockjaw "$APPDIR/usr/bin/lockjaw"
 
 # Bundle libssl/libcrypto so the AppImage works regardless of system OpenSSL version
 for lib in libssl.so.3 libcrypto.so.3; do
-    src=$(readlink -f /lib/x86_64-linux-gnu/$lib 2>/dev/null || \
-          readlink -f /usr/lib/x86_64-linux-gnu/$lib 2>/dev/null || true)
+    src=$(readlink -f /lib/${ARCH}-linux-gnu/$lib 2>/dev/null || \
+          readlink -f /usr/lib/${ARCH}-linux-gnu/$lib 2>/dev/null || true)
     if [ -n "$src" ] && [ -f "$src" ]; then
         cp "$src" "$APPDIR/usr/lib/$lib"
         echo "    bundled $lib"
@@ -74,18 +75,19 @@ print('    icon written')
 
 # ── 3. Ensure appimagetool is extracted ──────────────────────────────────────
 if [ ! -f "$APPIMAGETOOL_EXTRACT/AppRun" ]; then
-    echo "==> Downloading appimagetool..."
-    curl -L -o "$DIST/appimagetool" \
-      "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
-    chmod +x "$DIST/appimagetool"
+    echo "==> Downloading appimagetool for ${ARCH}..."
+    curl -L -o "$DIST/appimagetool-${ARCH}" \
+      "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+    chmod +x "$DIST/appimagetool-${ARCH}"
     echo "==> Extracting appimagetool (bypassing FUSE requirement)..."
-    cd "$DIST" && ./appimagetool --appimage-extract
+    cd "$DIST" && "./appimagetool-${ARCH}" --appimage-extract
+    mv "$DIST/squashfs-root" "$APPIMAGETOOL_EXTRACT"
 fi
 
 # ── 4. Build AppImage ─────────────────────────────────────────────────────────
 echo "==> Packaging AppImage..."
 cd "$DIST"
-ARCH=x86_64 "$APPIMAGETOOL_EXTRACT/AppRun" "$APPDIR" "$OUTPUT"
+ARCH=${ARCH} "$APPIMAGETOOL_EXTRACT/AppRun" "$APPDIR" "$OUTPUT"
 
 echo ""
 echo "Done!  $(ls -lh "$OUTPUT" | awk '{print $5, $9}')"

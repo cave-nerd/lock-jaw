@@ -2,7 +2,9 @@
 
 # AppImage build artifacts (appimagetool + extracted squashfs, output AppImage)
 /dist/squashfs-root/
+/dist/squashfs-root-*/
 /dist/appimagetool
+/dist/appimagetool-*
 /dist/*.AppImage
 /dist/LockJaw.AppDir/usr/
 

@@ -140,9 +140,8 @@ impl LockJawApp {
             return;
         }
         if !self.config.webdav.enabled {
-            self.status_message = Some(
-                "WebDAV disabled. Open Settings → Sync to configure.".to_string(),
-            );
+            self.status_message =
+                Some("WebDAV disabled. Open Settings → Sync to configure.".to_string());
             return;
         }
         if self.config.webdav.url.is_empty() {
@@ -220,13 +219,14 @@ impl LockJawApp {
             self.system_theme_counter = 0;
         }
         // Font size / heading scale
-        let font_changed    = (new_config.font_size    - self.config.font_size   ).abs() > 0.1;
+        let font_changed = (new_config.font_size - self.config.font_size).abs() > 0.1;
         let heading_changed = (new_config.heading_scale - self.config.heading_scale).abs() > 0.05;
         if font_changed || heading_changed {
             apply_text_styles(ctx, new_config.font_size, new_config.heading_scale);
         }
         // Text color override (re-apply whenever theme or color changes)
-        if new_config.text_color != self.config.text_color || new_config.theme != self.config.theme {
+        if new_config.text_color != self.config.text_color || new_config.theme != self.config.theme
+        {
             apply_text_color(ctx, &new_config.text_color);
         }
         // Vault path
@@ -255,8 +255,7 @@ impl LockJawApp {
                     match self.plugin_host.reload(&dir, &self.config.disabled_plugins) {
                         Ok(()) => {
                             let n = self.plugin_host.plugins.len();
-                            self.status_message =
-                                Some(format!("Addons reloaded ({n} found)."));
+                            self.status_message = Some(format!("Addons reloaded ({n} found)."));
                         }
                         Err(e) => {
                             self.status_message = Some(format!("Reload failed: {e}"));
@@ -284,13 +283,23 @@ impl LockJawApp {
                 if self.config.disabled_plugins.contains(&name) {
                     self.config.disabled_plugins.retain(|d| d != &name);
                     // Mark as enabled in the loaded plugin
-                    if let Some(p) = self.plugin_host.plugins.iter_mut().find(|p| p.manifest.name == name) {
+                    if let Some(p) = self
+                        .plugin_host
+                        .plugins
+                        .iter_mut()
+                        .find(|p| p.manifest.name == name)
+                    {
                         p.enabled = true;
                     }
                     self.status_message = Some(format!("Addon \"{name}\" enabled."));
                 } else {
                     self.config.disabled_plugins.push(name.clone());
-                    if let Some(p) = self.plugin_host.plugins.iter_mut().find(|p| p.manifest.name == name) {
+                    if let Some(p) = self
+                        .plugin_host
+                        .plugins
+                        .iter_mut()
+                        .find(|p| p.manifest.name == name)
+                    {
                         p.enabled = false;
                     }
                     self.status_message = Some(format!("Addon \"{name}\" disabled."));
@@ -322,123 +331,142 @@ impl eframe::App for LockJawApp {
             self.save_current_note();
         }
 
-        let accent    = self.theme.colors.accent.clone();
-        let muted     = self.theme.colors.fg_muted.clone();
+        let accent = self.theme.colors.accent.clone();
+        let muted = self.theme.colors.fg_muted.clone();
         let font_size = self.config.font_size;
 
         // ── Menu bar ────────────────────────────────────────────────────
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("New Note").clicked() {
-                        self.sidebar.show_new_note_input = true;
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if ui.button("Save  Ctrl+S").clicked() {
-                        self.save_current_note();
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if ui.button("Quit").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
-                });
+        let top_frame = egui::Frame::default()
+            .inner_margin(egui::vec2(8.0, 6.0))
+            .fill(ctx.style().visuals.panel_fill);
 
-                if ui.button("Settings").clicked() {
-                    self.settings.open(&self.config);
-                }
-
-                // ── View menu ────────────────────────────────────────────
-                ui.menu_button("View", |ui| {
-                    for (mode, label) in [
-                        ("both",    "Editor + Preview"),
-                        ("editor",  "Editor only"),
-                        ("preview", "Preview only"),
-                    ] {
-                        if ui.selectable_label(self.config.view_mode == mode, label).clicked() {
-                            self.config.view_mode = mode.to_string();
-                            self.config.save().ok();
+        egui::TopBottomPanel::top("menu_bar")
+            .frame(top_frame)
+            .show(ctx, |ui| {
+                egui::menu::bar(ui, |ui| {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("New Note").clicked() {
+                            self.sidebar.show_new_note_input = true;
                             ui.close_menu();
                         }
+                        ui.separator();
+                        if ui.button("Save  Ctrl+S").clicked() {
+                            self.save_current_note();
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        if ui.button("Quit").clicked() {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    });
+
+                    if ui.button("Settings").clicked() {
+                        self.settings.open(&self.config);
                     }
-                });
 
-                // Sync button
-                let sync_label = if self.is_syncing { "⟳ Syncing…" } else { "⟳ Sync" };
-                if ui
-                    .add_enabled(!self.is_syncing, egui::Button::new(sync_label))
-                    .on_hover_text("Sync notes with WebDAV server")
-                    .clicked()
-                {
-                    self.start_sync();
-                }
-                if self.is_syncing {
-                    ctx.request_repaint();
-                }
-
-                if ui.button("Addons").clicked() {
-                    self.addons.open = true;
-                }
-
-                // Plugin command palette (shown only when plugins register commands)
-                let commands = self.plugin_host.commands();
-                if !commands.is_empty() {
-                    ui.menu_button("Plugins", |ui| {
-                        for cmd in &commands {
-                            if ui.button(&cmd.name).clicked() {
+                    // ── View menu ────────────────────────────────────────────
+                    ui.menu_button("View", |ui| {
+                        for (mode, label) in [
+                            ("both", "Editor + Preview"),
+                            ("editor", "Editor only"),
+                            ("preview", "Preview only"),
+                        ] {
+                            if ui
+                                .selectable_label(self.config.view_mode == mode, label)
+                                .clicked()
+                            {
+                                self.config.view_mode = mode.to_string();
+                                self.config.save().ok();
                                 ui.close_menu();
                             }
                         }
                     });
-                }
-            });
-        });
 
-        // ── Status bar ──────────────────────────────────────────────────
-        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if let Some(note) = &self.open_note {
-                    let wc = lj_md::word_count(&note.body);
-                    ui.label(format!("{}", note.path.display()));
-                    ui.separator();
-                    ui.label(format!("{wc} words"));
-                    if note.dirty {
-                        ui.separator();
-                        ui.label(
-                            egui::RichText::new("unsaved")
-                                .color(parse_color(&self.theme.colors.warning)),
-                        );
+                    // Sync button
+                    let sync_label = if self.is_syncing {
+                        "⟳ Syncing…"
+                    } else {
+                        "⟳ Sync"
+                    };
+                    if ui
+                        .add_enabled(!self.is_syncing, egui::Button::new(sync_label))
+                        .on_hover_text("Sync notes with WebDAV server")
+                        .clicked()
+                    {
+                        self.start_sync();
                     }
-                } else if let Some(ref vault) = self.vault {
-                    ui.label(format!("Vault: {}", vault.root.display()));
-                } else {
-                    ui.label("No vault open");
-                }
+                    if self.is_syncing {
+                        ctx.request_repaint();
+                    }
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if !self.plugin_host.plugins.is_empty() {
-                        ui.label(format!("{} plugin(s)", self.plugin_host.plugins.len()));
-                        ui.separator();
+                    if ui.button("Addons").clicked() {
+                        self.addons.open = true;
                     }
-                    // Theme indicator
-                    let theme_name = crate::theme::THEMES
-                        .iter()
-                        .find(|(k, _)| *k == self.config.theme)
-                        .map(|(_, n)| *n)
-                        .unwrap_or(&self.config.theme);
-                    ui.label(
-                        egui::RichText::new(theme_name)
-                            .small()
-                            .color(parse_color(&muted)),
-                    );
-                    ui.separator();
-                    if let Some(msg) = &self.status_message {
-                        ui.label(msg);
+
+                    // Plugin command palette (shown only when plugins register commands)
+                    let commands = self.plugin_host.commands();
+                    if !commands.is_empty() {
+                        ui.menu_button("Plugins", |ui| {
+                            for cmd in &commands {
+                                if ui.button(&cmd.name).clicked() {
+                                    ui.close_menu();
+                                }
+                            }
+                        });
                     }
                 });
             });
-        });
+
+        // ── Status bar ──────────────────────────────────────────────────
+        let bottom_frame = egui::Frame::default()
+            .inner_margin(egui::vec2(8.0, 6.0))
+            .fill(ctx.style().visuals.panel_fill);
+
+        egui::TopBottomPanel::bottom("status_bar")
+            .frame(bottom_frame)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if let Some(note) = &self.open_note {
+                        let wc = lj_md::word_count(&note.body);
+                        ui.label(format!("{}", note.path.display()));
+                        ui.separator();
+                        ui.label(format!("{wc} words"));
+                        if note.dirty {
+                            ui.separator();
+                            ui.label(
+                                egui::RichText::new("unsaved")
+                                    .color(parse_color(&self.theme.colors.warning)),
+                            );
+                        }
+                    } else if let Some(ref vault) = self.vault {
+                        ui.label(format!("Vault: {}", vault.root.display()));
+                    } else {
+                        ui.label("No vault open");
+                    }
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if !self.plugin_host.plugins.is_empty() {
+                            ui.label(format!("{} plugin(s)", self.plugin_host.plugins.len()));
+                            ui.separator();
+                        }
+                        // Theme indicator
+                        let theme_name = crate::theme::THEMES
+                            .iter()
+                            .find(|(k, _)| *k == self.config.theme)
+                            .map(|(_, n)| *n)
+                            .unwrap_or(&self.config.theme);
+                        ui.label(
+                            egui::RichText::new(theme_name)
+                                .small()
+                                .color(parse_color(&muted)),
+                        );
+                        ui.separator();
+                        if let Some(msg) = &self.status_message {
+                            ui.label(msg);
+                        }
+                    });
+                });
+            });
 
         // ── Sidebar ─────────────────────────────────────────────────────
         let sidebar_action = egui::SidePanel::left("sidebar")
@@ -447,12 +475,17 @@ impl eframe::App for LockJawApp {
             .show(ctx, |ui| {
                 if let Some(vault) = &self.vault {
                     let active_path = self.open_note.as_ref().map(|n| n.path.as_path());
-                    self.sidebar.show(ui, vault, active_path, &accent, &muted, &self.config.icon_style)
+                    self.sidebar.show(
+                        ui,
+                        vault,
+                        active_path,
+                        &accent,
+                        &muted,
+                        &self.config.icon_style,
+                    )
                 } else {
                     ui.centered_and_justified(|ui| {
-                        ui.label(
-                            "No vault open.\nOpen Settings → General to set a vault path.",
-                        );
+                        ui.label("No vault open.\nOpen Settings → General to set a vault path.");
                     });
                     None
                 }
@@ -509,12 +542,18 @@ impl eframe::App for LockJawApp {
             }
             Some(SidebarAction::MoveNote(note_path, target_folder)) => {
                 let old_path = note_path.clone();
-                let result = self.vault.as_mut().map(|v| {
-                    v.move_note(&note_path, target_folder.as_deref())
-                });
+                let result = self
+                    .vault
+                    .as_mut()
+                    .map(|v| v.move_note(&note_path, target_folder.as_deref()));
                 match result {
                     Some(Ok(new_path)) => {
-                        if self.open_note.as_ref().map(|n| n.path == old_path).unwrap_or(false) {
+                        if self
+                            .open_note
+                            .as_ref()
+                            .map(|n| n.path == old_path)
+                            .unwrap_or(false)
+                        {
                             if let Some(note) = self.open_note.as_mut() {
                                 note.path = new_path;
                             }
@@ -532,7 +571,12 @@ impl eframe::App for LockJawApp {
                     if let Err(e) = vault.delete_note(&path) {
                         self.status_message = Some(format!("Error deleting: {e}"));
                     } else {
-                        if self.open_note.as_ref().map(|n| n.path == path).unwrap_or(false) {
+                        if self
+                            .open_note
+                            .as_ref()
+                            .map(|n| n.path == path)
+                            .unwrap_or(false)
+                        {
                             self.open_note = None;
                         }
                         self.status_message = Some("Note deleted.".to_string());
@@ -546,19 +590,16 @@ impl eframe::App for LockJawApp {
         let view_mode = self.config.view_mode.clone();
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(note) = self.open_note.as_mut() {
-                let (_, rename_request) =
-                    self.editor.show(ui, note, font_size, &view_mode);
+                let (_, rename_request) = self.editor.show(ui, note, font_size, &view_mode);
                 if let Some(new_name) = rename_request {
                     self.rename_current_note(new_name);
                 }
             } else {
                 ui.centered_and_justified(|ui| {
                     ui.label(
-                        egui::RichText::new(
-                            "Lock Jaw\n\nSelect or create a note to get started.",
-                        )
-                        .size(18.0)
-                        .color(parse_color(&muted)),
+                        egui::RichText::new("Lock Jaw\n\nSelect or create a note to get started.")
+                            .size(18.0)
+                            .color(parse_color(&muted)),
                     );
                 });
             }
@@ -572,19 +613,17 @@ impl eframe::App for LockJawApp {
 /// H1 = size × scale, then egui_commonmark interpolates H2–H6 between Body and Heading.
 fn apply_text_styles(ctx: &egui::Context, size: f32, heading_scale: f32) {
     let mut style = (*ctx.style()).clone();
-    style.text_styles.insert(
-        egui::TextStyle::Body,
-        egui::FontId::proportional(size),
-    );
+    style
+        .text_styles
+        .insert(egui::TextStyle::Body, egui::FontId::proportional(size));
     style.text_styles.insert(
         egui::TextStyle::Heading,
         egui::FontId::proportional(size * heading_scale),
     );
     // Keep Button in sync with body so toolbar labels feel consistent.
-    style.text_styles.insert(
-        egui::TextStyle::Button,
-        egui::FontId::proportional(size),
-    );
+    style
+        .text_styles
+        .insert(egui::TextStyle::Button, egui::FontId::proportional(size));
     ctx.set_style(style);
 }
 
@@ -597,7 +636,7 @@ fn apply_text_color(ctx: &egui::Context, hex: &str) {
     let color = parse_color(hex);
     let mut visuals = ctx.style().visuals.clone();
     visuals.widgets.noninteractive.fg_stroke.color = color;
-    visuals.widgets.inactive.fg_stroke.color       = color;
+    visuals.widgets.inactive.fg_stroke.color = color;
     ctx.set_visuals(visuals);
 }
 

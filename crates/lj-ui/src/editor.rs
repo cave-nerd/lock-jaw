@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use egui::{Color32, FontId, RichText, Ui};
+use egui::{FontId, RichText, Ui};
 use lj_core::Note;
 use lj_md::MarkdownCache;
 
@@ -39,7 +39,8 @@ impl EditorPane {
         let mut rename_request: Option<String> = None;
 
         let note_id = note.path.to_string_lossy().into_owned();
-        let stem = note.path
+        let stem = note
+            .path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("")
@@ -59,17 +60,19 @@ impl EditorPane {
             ui.visuals().widgets.noninteractive.fg_stroke.color
         };
 
+        ui.add_space(8.0);
         let title_resp = ui.add(
             egui::TextEdit::singleline(&mut self.rename_text)
-                .font(FontId::proportional(font_size * 1.4))
+                .font(FontId::proportional(font_size * 1.8))
                 .desired_width(f32::INFINITY)
                 .text_color(title_color)
                 .frame(false)
                 .hint_text("Note title…  (press Enter to rename)"),
         );
 
-        let enter_pressed  = title_resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        let escape_pressed = title_resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape));
+        let enter_pressed = title_resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let escape_pressed =
+            title_resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape));
         // Commit on focus-lost too — matches expected "click away = confirm" UX.
         let commit = enter_pressed || (title_resp.lost_focus() && !escape_pressed);
 
@@ -80,7 +83,7 @@ impl EditorPane {
         }
 
         // Subtle separator line under the title bar.
-        ui.add_space(1.0);
+        ui.add_space(4.0);
         let sep_color = if pending {
             ui.visuals().selection.stroke.color
         } else {
@@ -92,11 +95,25 @@ impl EditorPane {
             egui::vec2(ui.available_width(), 1.0),
         );
         ui.painter().rect_filled(line, 0.0, sep_color);
-        ui.add_space(4.0);
+        ui.add_space(8.0);
+
+        // Header pill label function.
+        let pill_label = |u: &mut egui::Ui, text: &str| {
+            let bg = u.visuals().widgets.noninteractive.bg_fill;
+            egui::Frame::none()
+                .fill(bg)
+                .rounding(16.0)
+                .inner_margin(egui::vec2(8.0, 4.0))
+                .show(u, |u| {
+                    u.label(RichText::new(text).small().strong());
+                });
+        };
 
         // ── Content area ────────────────────────────────────────────────
         match view_mode {
             "editor" => {
+                pill_label(ui, "MARKDOWN");
+                ui.add_space(4.0);
                 egui::ScrollArea::vertical()
                     .id_salt(format!("editor_{note_id}"))
                     .show(ui, |ui| {
@@ -116,6 +133,8 @@ impl EditorPane {
                     });
             }
             "preview" => {
+                pill_label(ui, "PREVIEW");
+                ui.add_space(4.0);
                 egui::ScrollArea::vertical()
                     .id_salt(format!("preview_{note_id}"))
                     .show(ui, |ui| {
@@ -123,30 +142,55 @@ impl EditorPane {
                     });
             }
             _ => {
-                // "both" — default split view
-                ui.columns(2, |cols| {
-                    cols[0].label(RichText::new("MARKDOWN").small().color(Color32::GRAY));
-                    egui::ScrollArea::vertical()
-                        .id_salt(format!("editor_{note_id}"))
-                        .show(&mut cols[0], |ui| {
-                            let resp = ui.add(
-                                egui::TextEdit::multiline(&mut note.raw)
-                                    .font(FontId::monospace(font_size))
-                                    .desired_width(f32::INFINITY)
-                                    .desired_rows(50)
-                                    .frame(false)
-                                    .lock_focus(true),
-                            );
-                            if resp.changed() {
-                                let new_raw = note.raw.clone();
-                                note.update_raw(new_raw);
-                                modified = true;
-                            }
-                        });
+                // "both" — split view
+                // SidePanel defaults to Left
+                egui::SidePanel::left(format!("editor_split_{note_id}"))
+                    .resizable(true)
+                    .default_width(ui.available_width() * 0.5)
+                    .frame(egui::Frame::none().inner_margin(egui::Margin {
+                        left: 0.0,
+                        right: 8.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    }))
+                    .show_inside(ui, |ui| {
+                        pill_label(ui, "MARKDOWN");
+                        ui.add_space(4.0);
+                        egui::ScrollArea::vertical()
+                            .id_salt(format!("editor_{note_id}"))
+                            .show(ui, |ui| {
+                                let resp = ui.add(
+                                    egui::TextEdit::multiline(&mut note.raw)
+                                        .font(FontId::monospace(font_size))
+                                        .desired_width(f32::INFINITY)
+                                        .desired_rows(50)
+                                        .frame(false)
+                                        .lock_focus(true),
+                                );
+                                if resp.changed() {
+                                    let new_raw = note.raw.clone();
+                                    note.update_raw(new_raw);
+                                    modified = true;
+                                }
+                            });
+                    });
 
-                    cols[1].label(RichText::new("PREVIEW").small().color(Color32::GRAY));
-                    self.markdown_cache.render(&mut cols[1], &note_id, &note.body);
-                });
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::none().inner_margin(egui::Margin {
+                        left: 8.0,
+                        right: 0.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    }))
+                    .show_inside(ui, |ui| {
+                        pill_label(ui, "PREVIEW");
+                        ui.add_space(4.0);
+                        egui::ScrollArea::vertical()
+                            .id_salt(format!("preview_{note_id}"))
+                            .show(ui, |ui| {
+                                self.markdown_cache.render(ui, &note_id, &note.body);
+                            });
+                    });
             }
         }
 

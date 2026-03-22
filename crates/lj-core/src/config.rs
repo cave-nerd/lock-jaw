@@ -6,9 +6,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::webdav::WebDavConfig;
 
-fn default_heading_scale() -> f32 { 2.0 }
-fn default_icon_style() -> String { "emoji".to_string() }
-fn default_view_mode() -> String { "both".to_string() }
+fn default_heading_scale() -> f32 {
+    2.0
+}
+fn default_icon_style() -> String {
+    "emoji".to_string()
+}
+fn default_view_mode() -> String {
+    "both".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -62,8 +68,7 @@ impl Default for Config {
 impl Config {
     /// Returns the XDG config dir for Lock Jaw.
     pub fn config_dir() -> Option<PathBuf> {
-        ProjectDirs::from("com", "lockjaw", "LockJaw")
-            .map(|dirs| dirs.config_dir().to_path_buf())
+        ProjectDirs::from("com", "lockjaw", "LockJaw").map(|dirs| dirs.config_dir().to_path_buf())
     }
 
     /// Returns the path to the config file.
@@ -81,8 +86,28 @@ impl Config {
         Self::config_dir().map(|d| d.join("plugins"))
     }
 
+    /// Ensure all required application directories exist, creating them if needed.
+    pub fn ensure_dirs() {
+        if let Some(dir) = Self::config_dir() {
+            std::fs::create_dir_all(&dir).ok();
+        }
+        if let Some(dir) = Self::plugins_dir() {
+            std::fs::create_dir_all(&dir).ok();
+        }
+        if let Some(dir) = Self::themes_dir() {
+            std::fs::create_dir_all(&dir).ok();
+        }
+        // Also create the default vault directory
+        if let Some(vault) =
+            directories::UserDirs::new().and_then(|u| u.document_dir().map(|d| d.join("LockJaw")))
+        {
+            std::fs::create_dir_all(&vault).ok();
+        }
+    }
+
     /// Load config from disk, or return defaults if not found.
     pub fn load() -> Self {
+        Self::ensure_dirs();
         let Some(path) = Self::config_path() else {
             return Self::default();
         };

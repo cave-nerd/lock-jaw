@@ -37,7 +37,9 @@ pub struct PluginHost {
 
 impl PluginHost {
     pub fn new() -> Self {
-        Self { plugins: Vec::new() }
+        Self {
+            plugins: Vec::new(),
+        }
     }
 
     /// Scan a directory for `plugin.toml` manifests and load each plugin.
@@ -93,7 +95,10 @@ impl PluginHost {
         let raw = std::fs::read_to_string(manifest_path)?;
         let manifest: PluginManifest = toml::from_str(&raw)?;
         let enabled = !disabled.iter().any(|d| d == &manifest.name);
-        info!("Loaded plugin: {} v{} (enabled={enabled})", manifest.name, manifest.version);
+        info!(
+            "Loaded plugin: {} v{} (enabled={enabled})",
+            manifest.name, manifest.version
+        );
         // TODO(Phase 2): instantiate wasmtime engine + store + module here
         self.plugins.push(LoadedPlugin {
             manifest,

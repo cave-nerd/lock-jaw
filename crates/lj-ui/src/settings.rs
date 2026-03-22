@@ -65,10 +65,10 @@ impl SettingsWindow {
             .show(ctx, |ui| {
                 // ── Tab bar ──────────────────────────────────────────────
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.tab, Tab::General,    "General");
-                    ui.selectable_value(&mut self.tab, Tab::Editor,     "Editor");
+                    ui.selectable_value(&mut self.tab, Tab::General, "General");
+                    ui.selectable_value(&mut self.tab, Tab::Editor, "Editor");
                     ui.selectable_value(&mut self.tab, Tab::Appearance, "Appearance");
-                    ui.selectable_value(&mut self.tab, Tab::Sync,       "Sync");
+                    ui.selectable_value(&mut self.tab, Tab::Sync, "Sync");
                 });
                 ui.separator();
 
@@ -76,10 +76,10 @@ impl SettingsWindow {
                 egui::ScrollArea::vertical()
                     .max_height(360.0)
                     .show(ui, |ui| match self.tab {
-                        Tab::General    => show_general(ui, &mut self.draft, &mut self.vault_path_str),
-                        Tab::Editor     => show_editor(ui, &mut self.draft),
+                        Tab::General => show_general(ui, &mut self.draft, &mut self.vault_path_str),
+                        Tab::Editor => show_editor(ui, &mut self.draft),
                         Tab::Appearance => show_appearance(ui, &mut self.draft),
-                        Tab::Sync       => show_sync(ui, &mut self.draft, &mut self.webdav_pw_visible),
+                        Tab::Sync => show_sync(ui, &mut self.draft, &mut self.webdav_pw_visible),
                     });
 
                 ui.add_space(8.0);
@@ -160,8 +160,8 @@ fn show_editor(ui: &mut Ui, draft: &mut Config) {
                 .selected_text(view_mode_label(&draft.view_mode))
                 .show_ui(ui, |ui| {
                     for (key, label) in [
-                        ("both",    "Editor + Preview"),
-                        ("editor",  "Editor only"),
+                        ("both", "Editor + Preview"),
+                        ("editor", "Editor only"),
                         ("preview", "Preview only"),
                     ] {
                         ui.selectable_value(&mut draft.view_mode, key.to_string(), label);
@@ -174,10 +174,14 @@ fn show_editor(ui: &mut Ui, draft: &mut Config) {
 
     // Live preview of heading sizes
     let body = draft.font_size;
-    let h1   = body * draft.heading_scale;
+    let h1 = body * draft.heading_scale;
     let diff = h1 - body;
 
-    ui.label(RichText::new("Heading preview (approximate):").small().color(Color32::GRAY));
+    ui.label(
+        RichText::new("Heading preview (approximate):")
+            .small()
+            .color(Color32::GRAY),
+    );
     ui.add_space(4.0);
 
     egui::Frame::none()
@@ -186,9 +190,21 @@ fn show_editor(ui: &mut Ui, draft: &mut Config) {
         .rounding(4.0)
         .show(ui, |ui| {
             ui.label(RichText::new("# Heading 1").size(h1).strong());
-            ui.label(RichText::new("## Heading 2").size(body + diff * 0.835).strong());
-            ui.label(RichText::new("### Heading 3").size(body + diff * 0.668).strong());
-            ui.label(RichText::new("#### Heading 4").size(body + diff * 0.501).strong());
+            ui.label(
+                RichText::new("## Heading 2")
+                    .size(body + diff * 0.835)
+                    .strong(),
+            );
+            ui.label(
+                RichText::new("### Heading 3")
+                    .size(body + diff * 0.668)
+                    .strong(),
+            );
+            ui.label(
+                RichText::new("#### Heading 4")
+                    .size(body + diff * 0.501)
+                    .strong(),
+            );
             ui.label(RichText::new("Body text").size(body));
         });
 
@@ -246,7 +262,8 @@ fn show_appearance(ui: &mut Ui, draft: &mut Config) {
         };
         let (rect, _) = ui.allocate_exact_size(egui::vec2(24.0, 24.0), egui::Sense::hover());
         ui.painter().rect_filled(rect, 3.0, swatch_color);
-        ui.painter().rect_stroke(rect, 3.0, egui::Stroke::new(1.0, Color32::from_gray(100)));
+        ui.painter()
+            .rect_stroke(rect, 3.0, egui::Stroke::new(1.0, Color32::from_gray(100)));
 
         ui.add(
             egui::TextEdit::singleline(&mut draft.text_color)
@@ -254,7 +271,11 @@ fn show_appearance(ui: &mut Ui, draft: &mut Config) {
                 .desired_width(200.0),
         );
 
-        if ui.small_button("Reset").on_hover_text("Use theme default").clicked() {
+        if ui
+            .small_button("Reset")
+            .on_hover_text("Use theme default")
+            .clicked()
+        {
             draft.text_color.clear();
         }
     });
@@ -278,12 +299,12 @@ fn show_appearance(ui: &mut Ui, draft: &mut Config) {
         .width(220.0)
         .show_ui(ui, |ui| {
             for (key, label) in [
-                ("emoji",   "📝 Emoji"),
+                ("emoji", "📝 Emoji"),
                 ("unicode", "◦ Unicode symbols"),
                 ("bullets", "• Bullets"),
-                ("arrows",  "→ Arrows"),
-                ("ascii",   "- ASCII"),
-                ("none",    "No icons"),
+                ("arrows", "→ Arrows"),
+                ("ascii", "- ASCII"),
+                ("none", "No icons"),
             ] {
                 ui.selectable_value(&mut draft.icon_style, key.to_string(), label);
             }
@@ -304,20 +325,20 @@ fn is_valid_hex(s: &str) -> bool {
 
 fn icon_style_label(style: &str) -> &'static str {
     match style {
-        "emoji"   => "📝 Emoji",
+        "emoji" => "📝 Emoji",
         "bullets" => "• Bullets",
-        "arrows"  => "→ Arrows",
-        "ascii"   => "- ASCII",
-        "none"    => "No icons",
-        _         => "◦ Unicode symbols",
+        "arrows" => "→ Arrows",
+        "ascii" => "- ASCII",
+        "none" => "No icons",
+        _ => "◦ Unicode symbols",
     }
 }
 
 fn view_mode_label(mode: &str) -> &'static str {
     match mode {
-        "editor"  => "Editor only",
+        "editor" => "Editor only",
         "preview" => "Preview only",
-        _         => "Editor + Preview",
+        _ => "Editor + Preview",
     }
 }
 
@@ -340,10 +361,7 @@ fn show_sync(ui: &mut Ui, draft: &mut Config, pw_visible: &mut bool) {
                 ui.end_row();
 
                 ui.label("Username:");
-                ui.add(
-                    egui::TextEdit::singleline(&mut draft.webdav.username)
-                        .desired_width(200.0),
-                );
+                ui.add(egui::TextEdit::singleline(&mut draft.webdav.username).desired_width(200.0));
                 ui.end_row();
 
                 ui.label("Password:");

@@ -27,7 +27,7 @@ egui = "0.30"
 eframe = { version = "0.30", features = ["default_fonts"] }
 
 # HTTP / WebDAV
-reqwest = { version = "0.12", features = ["blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 
 # System theme detection
 dark-light = "1"

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
 use reqwest::blocking::Client;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
@@ -48,9 +49,7 @@ impl WebDavConfig {
 
     /// Read the stored password from the keyring (returns empty string on any error).
     pub fn load_password(&self) -> String {
-        match keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-            .and_then(|e| e.get_password())
-        {
+        match keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).and_then(|e| e.get_password()) {
             Ok(pw) => pw,
             Err(_) => String::new(),
         }
@@ -88,7 +87,7 @@ impl WebDavClient {
     pub fn new(config: WebDavConfig) -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
-            .https_only(true)   // reject any non-TLS WebDAV URL
+            .https_only(true) // reject any non-TLS WebDAV URL
             .build()?;
         let base_url = if config.url.ends_with('/') {
             config.url.clone()
@@ -199,6 +198,13 @@ impl WebDavClient {
             if local_names.contains(remote_name) {
                 continue;
             }
+            if remote_name.contains('/') || remote_name.contains('\\') || remote_name.contains("..")
+            {
+                stats
+                    .errors
+                    .push(format!("Skipping unsafe remote file: {remote_name}"));
+                continue;
+            }
             match self.download(remote_name) {
                 Ok(content) => {
                     let dest = vault_root.join(remote_name);
@@ -251,7 +257,11 @@ fn parse_md_hrefs(xml: &str) -> HashSet<String> {
             // Take only the final path segment as the filename
             if let Some(name) = href.split('/').filter(|s| !s.is_empty()).last() {
                 if let Ok(decoded) = percent_decode(name) {
-                    results.insert(decoded);
+                    // Security: explicit check for path traversal elements after decoding
+                    if !decoded.contains('/') && !decoded.contains('\\') && !decoded.contains("..")
+                    {
+                        results.insert(decoded);
+                    }
                 }
             }
         }
@@ -260,36 +270,30 @@ fn parse_md_hrefs(xml: &str) -> HashSet<String> {
     results
 }
 
-/// Minimal percent-encode for filenames: encodes spaces and non-ASCII.
+const WEBDAV_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'`')
+    .add(b'{')
+    .add(b'}')
+    .add(b'/')
+    .add(b'%');
+
+/// Minimal percent-encode for filenames using percent-encoding crate.
 fn percent_encode(s: &str) -> String {
-    s.chars()
-        .flat_map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
-                vec![c]
-            } else if c == ' ' {
-                "%20".chars().collect()
-            } else {
-                format!("%{:02X}", c as u32).chars().collect()
-            }
-        })
-        .collect()
+    utf8_percent_encode(s, WEBDAV_ENCODE_SET).to_string()
 }
 
 /// Decode `%XX` sequences in a URL-encoded filename.
 fn percent_decode(s: &str) -> Result<String> {
-    let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let h1 = chars.next().ok_or_else(|| anyhow::anyhow!("Truncated %"))?;
-            let h2 = chars.next().ok_or_else(|| anyhow::anyhow!("Truncated %"))?;
-            let byte = u8::from_str_radix(&format!("{h1}{h2}"), 16)?;
-            out.push(byte as char);
-        } else {
-            out.push(c);
-        }
-    }
-    Ok(out)
+    percent_decode_str(s)
+        .decode_utf8()
+        .map(|cow| cow.into_owned())
+        .map_err(|e| anyhow::anyhow!("UTF-8 decode error: {}", e))
 }
 
 fn collect_md_files(dir: &Path) -> Result<Vec<PathBuf>> {

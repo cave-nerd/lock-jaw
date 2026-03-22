@@ -7,8 +7,15 @@ on:
 
 jobs:
   build-appimage:
-    name: Build AppImage
-    runs-on: ubuntu-22.04
+    name: Build AppImage (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
 
     steps:
       - uses: actions/checkout@v4
@@ -35,8 +42,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
 
       - name: Build AppImage
         run: ./build-appimage.sh
@@ -44,7 +51,8 @@ jobs:
       - name: Rename artifact with version tag
         run: |
           VERSION="${GITHUB_REF_NAME}"
-          mv dist/LockJaw-x86_64.AppImage "LockJaw-${VERSION}-x86_64.AppImage"
+          ARCH="${{ matrix.arch }}"
+          mv "dist/LockJaw-${ARCH}.AppImage" "LockJaw-${VERSION}-${ARCH}.AppImage"
 
       - name: Create GitHub Release and upload AppImage
         uses: softprops/action-gh-release@v2

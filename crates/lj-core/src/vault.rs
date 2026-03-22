@@ -18,8 +18,16 @@ impl Vault {
     /// Open a vault at the given directory, discovering all `.md` files.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref().to_path_buf();
-        anyhow::ensure!(root.is_dir(), "Vault path is not a directory: {}", root.display());
-        let mut vault = Self { root, entries: Vec::new(), folders: Vec::new() };
+        anyhow::ensure!(
+            root.is_dir(),
+            "Vault path is not a directory: {}",
+            root.display()
+        );
+        let mut vault = Self {
+            root,
+            entries: Vec::new(),
+            folders: Vec::new(),
+        };
         vault.refresh()?;
         Ok(vault)
     }
@@ -60,7 +68,9 @@ impl Vault {
         self.entries.push(path.clone());
         self.entries.sort();
         // Ensure the folder is tracked
-        let rel = folder.components().next()
+        let rel = folder
+            .components()
+            .next()
             .map(|c| PathBuf::from(c.as_os_str()))
             .unwrap_or(folder.to_path_buf());
         if !self.folders.contains(&rel) {
@@ -158,9 +168,7 @@ fn collect_direct_subdirs(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut results = Vec::new();
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
-        if entry.path().is_dir()
-            && !entry.file_name().to_string_lossy().starts_with('.')
-        {
+        if entry.path().is_dir() && !entry.file_name().to_string_lossy().starts_with('.') {
             results.push(PathBuf::from(entry.file_name()));
         }
     }
@@ -169,6 +177,12 @@ fn collect_direct_subdirs(dir: &Path) -> Result<Vec<PathBuf>> {
 
 fn sanitize_filename(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect()
 }
