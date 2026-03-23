@@ -87,7 +87,8 @@ fi
 # ── 4. Build AppImage ─────────────────────────────────────────────────────────
 echo "==> Packaging AppImage..."
 cd "$DIST"
-ARCH=${ARCH} "$APPIMAGETOOL_EXTRACT/AppRun" "$APPDIR" "$OUTPUT"
+export ARCH
+"$APPIMAGETOOL_EXTRACT/AppRun" "$APPDIR" "$OUTPUT"
 
 echo ""
 echo "Done!  $(ls -lh "$OUTPUT" | awk '{print $5, $9}')"
