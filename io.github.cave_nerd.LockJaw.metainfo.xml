@@ -9,15 +9,32 @@
   <description>
     <p>
       Lock Jaw is a local-first markdown note-taking app built with Rust and egui.
-      Notes are plain .md files stored in a vault directory you choose.
-      Features include a live split editor/preview, folder sections,
-      drag-and-drop organisation, multiple themes, and optional WebDAV sync.
+      Notes are stored as plain .md files in a vault directory you choose —
+      no accounts, no cloud dependency, no lock-in.
     </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Live split editor and preview pane</li>
+      <li>Folder sections with collapsible tree navigation</li>
+      <li>Multiple built-in themes including dark and light modes</li>
+      <li>Optional WebDAV sync for self-hosted note backup</li>
+      <li>WASM plugin system for extensibility</li>
+      <li>Fuzzy search across all notes</li>
+    </ul>
   </description>
 
   <launchable type="desktop-id">io.github.cave_nerd.LockJaw.desktop</launchable>
 
   <url type="homepage">https://github.com/cave-nerd/lock-jaw</url>
+  <url type="vcs-browser">https://github.com/cave-nerd/lock-jaw</url>
+  <url type="bugtracker">https://github.com/cave-nerd/lock-jaw/issues</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Editor and live preview side by side</caption>
+      <image type="source" width="1248" height="702">https://raw.githubusercontent.com/cave-nerd/lock-jaw/main/assets/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
 
   <categories>
     <category>Utility</category>
@@ -28,6 +45,8 @@
     <keyword>notes</keyword>
     <keyword>markdown</keyword>
     <keyword>editor</keyword>
+    <keyword>vault</keyword>
+    <keyword>local-first</keyword>
   </keywords>
 
   <provides>
@@ -35,9 +54,16 @@
   </provides>
 
   <releases>
-    <release version="0.1.0" date="2026-03-01">
+    <release version="0.1.0" date="2026-03-22">
       <description>
-        <p>Initial release.</p>
+        <p>Initial release of Lock Jaw.</p>
+        <ul>
+          <li>Vault-based file management</li>
+          <li>Split editor and live Markdown preview</li>
+          <li>Dark and light themes</li>
+          <li>WebDAV sync with OS keyring credential storage</li>
+          <li>WASM plugin host</li>
+        </ul>
       </description>
     </release>
   </releases>
