@@ -9,6 +9,8 @@ jobs:
   build-appimage:
     name: Build AppImage (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -60,5 +62,3 @@ jobs:
         with:
           files: LockJaw-*.AppImage
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
