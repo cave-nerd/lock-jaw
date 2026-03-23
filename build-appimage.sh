@@ -74,13 +74,15 @@ if [ ! -f "$APPIMAGETOOL_BIN" ]; then
 fi
 
 # ── 4. Build AppImage ─────────────────────────────────────────────────────────
-echo "==> AppDir contents (ELF check):"
-find "$APPDIR" -type f -exec file {} \;
-
 echo "==> Packaging AppImage (ARCH=${ARCH})..."
 export ARCH
-cd "$SCRIPT_DIR"
-"$APPIMAGETOOL_BIN" "$APPDIR" "$OUTPUT"
+cd "$DIST"
+# go-appimage auto-names the output — move it to the expected name afterwards
+"$APPIMAGETOOL_BIN" "$APPDIR"
+GENERATED=$(ls -1t "$DIST"/*.AppImage 2>/dev/null | head -1)
+if [ "$GENERATED" != "$OUTPUT" ]; then
+    mv "$GENERATED" "$OUTPUT"
+fi
 
 echo ""
 echo "Done!  $(ls -lh "$OUTPUT" | awk '{print $5, $9}')"
