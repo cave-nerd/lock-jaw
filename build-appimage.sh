@@ -64,8 +64,12 @@ print('    icon written')
 APPIMAGETOOL_BIN="$DIST/appimagetool-${ARCH}"
 if [ ! -f "$APPIMAGETOOL_BIN" ]; then
     echo "==> Downloading go-appimage appimagetool for ${ARCH}..."
-    curl -fsSL -o "$APPIMAGETOOL_BIN" \
-      "https://github.com/probonopd/go-appimage/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+    APPTOOL_URL=$(curl -fsSL "https://api.github.com/repos/probonopd/go-appimage/releases/tags/continuous" \
+      | grep "browser_download_url" \
+      | grep "appimagetool.*${ARCH}\.AppImage\"" \
+      | head -1 | cut -d'"' -f4)
+    echo "    URL: $APPTOOL_URL"
+    curl -fsSL -o "$APPIMAGETOOL_BIN" "$APPTOOL_URL"
     chmod +x "$APPIMAGETOOL_BIN"
 fi
 
