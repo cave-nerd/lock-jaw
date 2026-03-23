@@ -10,36 +10,23 @@ APPDIR="$DIST/LockJaw.AppDir"
 OUTPUT="$DIST/LockJaw-${ARCH}.AppImage"
 APPIMAGETOOL_EXTRACT="$DIST/squashfs-root-${ARCH}"
 
-# ── 1. Build the Rust binary ────────────────────────────────────────────────
+# ── 1. Build the Rust binary ─────────────────────────────────────────────────
 echo "==> Building lockjaw (release) for ${ARCH}..."
 cd "$SCRIPT_DIR"
 cargo build --release -p lj-ui
 
-# ── 2. Set up AppDir ─────────────────────────────────────────────────────────
+# ── 2. Set up AppDir ──────────────────────────────────────────────────────────
 echo "==> Setting up AppDir..."
 rm -rf "$APPDIR"
-mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib"
+mkdir -p "$APPDIR/usr/bin"
 
 cp target/release/lockjaw "$APPDIR/usr/bin/lockjaw"
-
-# Bundle libssl/libcrypto so the AppImage works regardless of system OpenSSL version
-for lib in libssl.so.3 libcrypto.so.3; do
-    src=$(readlink -f /lib/${ARCH}-linux-gnu/$lib 2>/dev/null || \
-          readlink -f /usr/lib/${ARCH}-linux-gnu/$lib 2>/dev/null || true)
-    if [ -n "$src" ] && [ -f "$src" ]; then
-        cp "$src" "$APPDIR/usr/lib/$lib"
-        echo "    bundled $lib"
-    else
-        echo "    WARNING: $lib not found, skipping"
-    fi
-done
 
 # AppRun
 cat > "$APPDIR/AppRun" <<'APPRUN'
 #!/bin/bash
 SELF=$(readlink -f "$0")
 HERE="${SELF%/*}"
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
 exec "${HERE}/usr/bin/lockjaw" "$@"
 APPRUN
 chmod +x "$APPDIR/AppRun"
@@ -73,7 +60,7 @@ img.save(os.environ['LJ_ICON_OUT'])
 print('    icon written')
 " || echo "    WARNING: PIL not available; add lockjaw.png to $APPDIR/ manually"
 
-# ── 3. Ensure appimagetool is extracted ──────────────────────────────────────
+# ── 3. Ensure appimagetool is extracted ───────────────────────────────────────
 if [ ! -f "$APPIMAGETOOL_EXTRACT/AppRun" ]; then
     echo "==> Downloading appimagetool for ${ARCH}..."
     curl -L -o "$DIST/appimagetool-${ARCH}" \
@@ -85,9 +72,12 @@ if [ ! -f "$APPIMAGETOOL_EXTRACT/AppRun" ]; then
 fi
 
 # ── 4. Build AppImage ─────────────────────────────────────────────────────────
-echo "==> Packaging AppImage..."
-cd "$DIST"
+echo "==> AppDir contents (ELF check):"
+find "$APPDIR" -type f -exec file {} \;
+
+echo "==> Packaging AppImage (ARCH=${ARCH})..."
 export ARCH
+cd "$SCRIPT_DIR"
 "$APPIMAGETOOL_EXTRACT/AppRun" "$APPDIR" "$OUTPUT"
 
 echo ""
