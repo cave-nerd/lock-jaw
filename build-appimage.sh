@@ -60,15 +60,13 @@ img.save(os.environ['LJ_ICON_OUT'])
 print('    icon written')
 " || echo "    WARNING: PIL not available; add lockjaw.png to $APPDIR/ manually"
 
-# ── 3. Ensure appimagetool is extracted ───────────────────────────────────────
-if [ ! -f "$APPIMAGETOOL_EXTRACT/AppRun" ]; then
-    echo "==> Downloading appimagetool for ${ARCH}..."
-    curl -L -o "$DIST/appimagetool-${ARCH}" \
-      "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH}.AppImage"
-    chmod +x "$DIST/appimagetool-${ARCH}"
-    echo "==> Extracting appimagetool (bypassing FUSE requirement)..."
-    cd "$DIST" && "./appimagetool-${ARCH}" --appimage-extract
-    mv "$DIST/squashfs-root" "$APPIMAGETOOL_EXTRACT"
+# ── 3. Ensure appimagetool is available ──────────────────────────────────────
+APPIMAGETOOL_BIN="$DIST/appimagetool-${ARCH}"
+if [ ! -f "$APPIMAGETOOL_BIN" ]; then
+    echo "==> Downloading go-appimage appimagetool for ${ARCH}..."
+    curl -fsSL -o "$APPIMAGETOOL_BIN" \
+      "https://github.com/probonopd/go-appimage/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+    chmod +x "$APPIMAGETOOL_BIN"
 fi
 
 # ── 4. Build AppImage ─────────────────────────────────────────────────────────
@@ -78,7 +76,7 @@ find "$APPDIR" -type f -exec file {} \;
 echo "==> Packaging AppImage (ARCH=${ARCH})..."
 export ARCH
 cd "$SCRIPT_DIR"
-"$APPIMAGETOOL_EXTRACT/AppRun" "$APPDIR" "$OUTPUT"
+"$APPIMAGETOOL_BIN" "$APPDIR" "$OUTPUT"
 
 echo ""
 echo "Done!  $(ls -lh "$OUTPUT" | awk '{print $5, $9}')"
