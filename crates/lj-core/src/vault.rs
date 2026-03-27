@@ -133,6 +133,34 @@ impl Vault {
         Ok(new_path)
     }
 
+    /// Rename a section (sub-directory). Moves the directory on disk and updates
+    /// all in-memory entry paths that lived inside it. Returns the new absolute path.
+    pub fn rename_folder(&mut self, old_rel: &Path, new_name: &str) -> Result<PathBuf> {
+        let new_dir_name = sanitize_filename(new_name);
+        let old_abs = self.root.join(old_rel);
+        let new_abs = self.root.join(&new_dir_name);
+        if new_abs == old_abs {
+            return Ok(old_abs);
+        }
+        std::fs::rename(&old_abs, &new_abs)?;
+        // Re-root every entry that was inside the old folder.
+        for entry in &mut self.entries {
+            if entry.starts_with(&old_abs) {
+                let tail = entry.strip_prefix(&old_abs).unwrap().to_path_buf();
+                *entry = new_abs.join(tail);
+            }
+        }
+        // Update the folders list.
+        let old_rel_pb = old_rel.to_path_buf();
+        self.folders.retain(|f| f != &old_rel_pb);
+        let new_rel = PathBuf::from(&new_dir_name);
+        if !self.folders.contains(&new_rel) {
+            self.folders.push(new_rel);
+            self.folders.sort();
+        }
+        Ok(new_abs)
+    }
+
     /// Delete a note from disk and remove from entries.
     pub fn delete_note(&mut self, path: &Path) -> Result<()> {
         std::fs::remove_file(path)?;

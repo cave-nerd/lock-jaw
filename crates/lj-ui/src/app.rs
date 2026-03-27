@@ -566,6 +566,27 @@ impl eframe::App for LockJawApp {
                     None => {}
                 }
             }
+            Some(SidebarAction::RenameFolder(old_rel, new_name)) => {
+                if let Some(vault) = self.vault.as_mut() {
+                    let old_abs = vault.root.join(&old_rel);
+                    match vault.rename_folder(&old_rel, &new_name) {
+                        Ok(new_abs) => {
+                            // Update the open note's path if it lived inside the renamed folder.
+                            if let Some(note) = self.open_note.as_mut() {
+                                if note.path.starts_with(&old_abs) {
+                                    if let Ok(tail) = note.path.strip_prefix(&old_abs) {
+                                        note.path = new_abs.join(tail);
+                                    }
+                                }
+                            }
+                            self.status_message = Some(format!("Section renamed to: {new_name}"));
+                        }
+                        Err(e) => {
+                            self.status_message = Some(format!("Rename failed: {e}"));
+                        }
+                    }
+                }
+            }
             Some(SidebarAction::DeleteNote(path)) => {
                 if let Some(vault) = self.vault.as_mut() {
                     if let Err(e) = vault.delete_note(&path) {

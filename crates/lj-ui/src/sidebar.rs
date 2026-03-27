@@ -17,6 +17,9 @@ pub struct Sidebar {
     /// Whether the new-section (folder) input is visible.
     show_new_folder_input: bool,
     new_folder_name: String,
+    /// Which folder (relative path) is currently being renamed, if any.
+    renaming_folder: Option<PathBuf>,
+    rename_folder_buf: String,
 }
 
 impl Default for Sidebar {
@@ -28,6 +31,8 @@ impl Default for Sidebar {
             new_note_folder: None,
             show_new_folder_input: false,
             new_folder_name: String::new(),
+            renaming_folder: None,
+            rename_folder_buf: String::new(),
         }
     }
 }
@@ -43,6 +48,8 @@ pub enum SidebarAction {
     DeleteNote(PathBuf),
     /// Move a note to a folder (relative to vault root), or `None` = vault root.
     MoveNote(PathBuf, Option<PathBuf>),
+    /// Rename a section (folder). `old_rel` is relative to vault root.
+    RenameFolder(PathBuf, String),
 }
 
 impl Sidebar {
@@ -244,6 +251,32 @@ impl Sidebar {
 
                 ui.add_space(8.0);
 
+                // ── Inline rename input ──────────────────────────────────
+                if self.renaming_folder.as_deref() == Some(folder_rel.as_path()) {
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(&mut self.rename_folder_buf)
+                            .desired_width(f32::INFINITY),
+                    );
+                    resp.request_focus();
+                    if resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        let new_name = self.rename_folder_buf.trim().to_string();
+                        if !new_name.is_empty() {
+                            action = Some(SidebarAction::RenameFolder(
+                                folder_rel.clone(),
+                                new_name,
+                            ));
+                        }
+                        self.renaming_folder = None;
+                        self.rename_folder_buf.clear();
+                    }
+                    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        self.renaming_folder = None;
+                        self.rename_folder_buf.clear();
+                    }
+                    continue;
+                }
+
+                // ── Normal folder header ─────────────────────────────────
                 let header_label = if folder_pfx.is_empty() {
                     RichText::new(&folder_name).strong()
                 } else {
@@ -287,6 +320,15 @@ impl Sidebar {
                                 (inner, plus)
                             })
                     });
+
+                // Right-click context menu on the section header.
+                dnd_inner.inner.header_response.context_menu(|ui| {
+                    if ui.button("Rename").clicked() {
+                        self.renaming_folder = Some(folder_rel.clone());
+                        self.rename_folder_buf = folder_name.clone();
+                        ui.close_menu();
+                    }
+                });
 
                 // Process CollapsingHeader body return.
                 if let Some(body_returned) = dnd_inner.inner.body_returned {
