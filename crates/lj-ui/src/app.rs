@@ -587,6 +587,31 @@ impl eframe::App for LockJawApp {
                     }
                 }
             }
+            Some(SidebarAction::DeleteFolder(folder_rel)) => {
+                if let Some(vault) = self.vault.as_mut() {
+                    let abs = vault.root.join(&folder_rel);
+                    match vault.delete_folder(&folder_rel) {
+                        Ok(()) => {
+                            // Close the open note if it lived inside the deleted folder.
+                            if self
+                                .open_note
+                                .as_ref()
+                                .map(|n| n.path.starts_with(&abs))
+                                .unwrap_or(false)
+                            {
+                                self.open_note = None;
+                            }
+                            self.status_message = Some(format!(
+                                "Section deleted: {}",
+                                folder_rel.display()
+                            ));
+                        }
+                        Err(e) => {
+                            self.status_message = Some(format!("Delete failed: {e}"));
+                        }
+                    }
+                }
+            }
             Some(SidebarAction::DeleteNote(path)) => {
                 if let Some(vault) = self.vault.as_mut() {
                     if let Err(e) = vault.delete_note(&path) {

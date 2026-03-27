@@ -50,6 +50,8 @@ pub enum SidebarAction {
     MoveNote(PathBuf, Option<PathBuf>),
     /// Rename a section (folder). `old_rel` is relative to vault root.
     RenameFolder(PathBuf, String),
+    /// Delete a section and all notes inside it.
+    DeleteFolder(PathBuf),
 }
 
 impl Sidebar {
@@ -326,6 +328,11 @@ impl Sidebar {
                     if ui.button("Rename").clicked() {
                         self.renaming_folder = Some(folder_rel.clone());
                         self.rename_folder_buf = folder_name.clone();
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                    if ui.button(RichText::new("Delete").color(Color32::from_rgb(220, 38, 38))).clicked() {
+                        action = Some(SidebarAction::DeleteFolder(folder_rel.clone()));
                         ui.close_menu();
                     }
                 });

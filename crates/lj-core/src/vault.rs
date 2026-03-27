@@ -161,6 +161,16 @@ impl Vault {
         Ok(new_abs)
     }
 
+    /// Delete a section (sub-directory) and all notes inside it from disk.
+    pub fn delete_folder(&mut self, folder_rel: &Path) -> Result<()> {
+        let abs = self.root.join(folder_rel);
+        std::fs::remove_dir_all(&abs)?;
+        self.entries.retain(|p| !p.starts_with(&abs));
+        let rel_pb = folder_rel.to_path_buf();
+        self.folders.retain(|f| f != &rel_pb);
+        Ok(())
+    }
+
     /// Delete a note from disk and remove from entries.
     pub fn delete_note(&mut self, path: &Path) -> Result<()> {
         std::fs::remove_file(path)?;
