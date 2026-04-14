@@ -15,6 +15,9 @@ fn default_icon_style() -> String {
 fn default_view_mode() -> String {
     "both".to_string()
 }
+fn default_autosave() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -43,6 +46,9 @@ pub struct Config {
     /// Plugin names that are explicitly disabled in the addon manager.
     #[serde(default)]
     pub disabled_plugins: Vec<String>,
+    /// Save the current note automatically ~1 second after the user stops typing.
+    #[serde(default = "default_autosave")]
+    pub autosave_enabled: bool,
 }
 
 impl Default for Config {
@@ -61,6 +67,7 @@ impl Default for Config {
             view_mode: default_view_mode(),
             webdav: WebDavConfig::default(),
             disabled_plugins: Vec::new(),
+            autosave_enabled: default_autosave(),
         }
     }
 }

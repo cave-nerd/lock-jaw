@@ -154,6 +154,14 @@ fn show_editor(ui: &mut Ui, draft: &mut Config) {
             );
             ui.end_row();
 
+            // ── Autosave ──────────────────────────────────────────────────
+            ui.label("Autosave:");
+            ui.checkbox(
+                &mut draft.autosave_enabled,
+                "Save automatically ~1 s after you stop typing",
+            );
+            ui.end_row();
+
             // ── Default view mode ─────────────────────────────────────────
             ui.label("Default view:");
             egui::ComboBox::from_id_salt("view_mode_combo")

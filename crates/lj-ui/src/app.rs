@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
+use std::time::{Duration, Instant};
 
 use lj_core::{webdav, Config, Note, Vault};
 use lj_plugin::PluginHost;
@@ -29,6 +30,8 @@ pub struct LockJawApp {
     is_syncing: bool,
     // System theme polling (check every ~300 frames ≈ 5 s at 60 fps)
     system_theme_counter: u32,
+    // Autosave: records the instant of the last keystroke for debouncing.
+    last_edit_instant: Option<Instant>,
 }
 
 impl LockJawApp {
@@ -63,6 +66,7 @@ impl LockJawApp {
             sync_rx: None,
             is_syncing: false,
             system_theme_counter: 0,
+            last_edit_instant: None,
         }
     }
 
@@ -86,6 +90,7 @@ impl LockJawApp {
     }
 
     fn open_note(&mut self, path: PathBuf) {
+        self.last_edit_instant = None;
         if self.open_note.as_ref().map(|n| n.dirty).unwrap_or(false) {
             self.save_current_note();
         }
@@ -210,6 +215,37 @@ impl LockJawApp {
         }
     }
 
+    /// Automatically save the current note ~1 second after the user stops typing.
+    /// Fires silently on success; only updates the status bar on error.
+    fn poll_autosave(&mut self, ctx: &egui::Context) {
+        if !self.config.autosave_enabled {
+            return;
+        }
+        let Some(instant) = self.last_edit_instant else {
+            return;
+        };
+        let elapsed = instant.elapsed();
+        if elapsed >= Duration::from_secs(1) {
+            self.last_edit_instant = None;
+            if self.open_note.as_ref().map(|n| n.dirty).unwrap_or(false) {
+                if let Some(note) = self.open_note.as_mut() {
+                    let transformed = self
+                        .plugin_host
+                        .on_note_save(note.path.to_str().unwrap_or(""), note.raw.clone());
+                    note.raw = transformed;
+                    if let Err(e) = note.save() {
+                        self.status_message = Some(format!("Autosave error: {e}"));
+                        error!("Autosave error: {e}");
+                    }
+                }
+            }
+        } else {
+            // Wake up the UI after the remaining debounce time so we don't rely on
+            // user input to trigger the next frame.
+            ctx.request_repaint_after(Duration::from_secs(1) - elapsed);
+        }
+    }
+
     /// Apply a saved config: reload theme, font, vault if needed, then persist.
     fn apply_config(&mut self, new_config: Config, ctx: &egui::Context) {
         // Theme
@@ -314,6 +350,7 @@ impl eframe::App for LockJawApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_sync();
         self.poll_system_theme(ctx);
+        self.poll_autosave(ctx);
 
         // Settings window (floating, before panels so it renders on top)
         if let Some(new_config) = self.settings.show(ctx) {
@@ -636,7 +673,11 @@ impl eframe::App for LockJawApp {
         let view_mode = self.config.view_mode.clone();
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(note) = self.open_note.as_mut() {
-                let (_, rename_request) = self.editor.show(ui, note, font_size, &view_mode);
+                let (content_modified, rename_request) =
+                    self.editor.show(ui, note, font_size, &view_mode);
+                if content_modified {
+                    self.last_edit_instant = Some(Instant::now());
+                }
                 if let Some(new_name) = rename_request {
                     self.rename_current_note(new_name);
                 }

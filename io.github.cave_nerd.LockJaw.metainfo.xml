@@ -54,6 +54,16 @@
   </provides>
 
   <releases>
+    <release version="0.4.0" date="2026-04-14">
+      <description>
+        <p>Add autosave support.</p>
+        <ul>
+          <li>Notes are saved automatically ~1 second after you stop typing</li>
+          <li>Autosave can be toggled on or off in Settings → Editor</li>
+          <li>Autosave is silent on success; errors are shown in the status bar</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-03-22">
       <description>
         <p>Initial release of Lock Jaw.</p>
